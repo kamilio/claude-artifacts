@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const bin = resolve(root, process.env["CLAUDE_ARTIFACTS_MCP_TEST_BIN"] ?? "bin/claude-artifacts-mcp.mjs");
-const child = spawn(process.execPath, [bin], { cwd: root, env: process.env });
+const child = bin.endsWith(".mjs") ? spawn(process.execPath, [bin], { cwd: root, env: process.env }) : spawn(bin, [], { cwd: root, env: process.env });
 const responses = new Map();
 let stdout = "";
 let stderr = "";
