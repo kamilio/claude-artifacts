@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { defineCommand, defineGroup, S } from "toolcraft";
@@ -115,9 +116,13 @@ async function artifactTitle(path, title) {
 }
 
 async function oauthToken() {
-  if (process.env["CLAUDE_CODE_OAUTH_TOKEN"] !== undefined) return process.env["CLAUDE_CODE_OAUTH_TOKEN"];
-  const result = await execFilePromise("security", ["find-generic-password", "-a", process.env["USER"], "-w", "-s", "Claude Code-credentials"], { encoding: "utf8" });
-  return JSON.parse(result.stdout)["claudeAiOauth"]["accessToken"];
+  if (process.env["CLAUDE_CODE_OAUTH_TOKEN"]) return process.env["CLAUDE_CODE_OAUTH_TOKEN"];
+  if (process.platform === "darwin") {
+    const result = await execFilePromise("security", ["find-generic-password", "-a", process.env["USER"], "-w", "-s", "Claude Code-credentials"], { encoding: "utf8" });
+    return JSON.parse(result.stdout)["claudeAiOauth"]["accessToken"];
+  }
+  const configDir = process.env["CLAUDE_CONFIG_DIR"] ?? join(homedir(), ".claude");
+  return JSON.parse(await readFile(join(configDir, ".credentials.json"), "utf8"))["claudeAiOauth"]["accessToken"];
 }
 
 function artifactsApiBaseUrl() {

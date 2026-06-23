@@ -1,34 +1,34 @@
 # claude-artifacts
 
-Claude Code artifacts are great once they exist. The annoying part is managing them through a chat window.
+Publish, list, update, read, and delete Claude Code artifacts from your terminal.
 
-`claude-artifacts` is a tiny terminal remote control for the artifacts already living behind `https://claude.ai/code/artifacts`.
+Claude Code artifacts are great once they exist. Managing them through a chat window is the slow part.
 
-It lets you:
+`claude-artifacts` is a small CLI that talks directly to the same artifact API behind `https://claude.ai/code/artifacts`. It reuses your existing Claude Code login, so there is no pasted token, no separate API key, and no LLM turn just to upload a file.
 
-- create a new artifact from local HTML or Markdown
-- list your Claude Code artifacts from the API
-- read metadata or download the current HTML
-- update an existing artifact in place
-- delete the junk without opening a browser
-
-No LLM turn. No prompt ceremony. No pasted token. It reuses your existing Claude Code login and talks directly to the same frame API the web app uses.
+- Ship local HTML or Markdown as a Claude artifact.
+- List only artifacts created from Claude Code.
+- Download the current artifact HTML.
+- Replace an artifact without changing its URL.
+- Delete throwaway test artifacts from the shell.
 
 ## Install
 
-Requires Node.js. Tested on Node 18 and Node 22. The current Toolcraft dependency may print npm engine warnings on Node 18, but the CLI test suite passes there.
-
-One command from GitHub:
+One command. No npm package install. No repo clone.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kamilio/claude-artifacts/main/install.sh | bash
 ```
 
-That installs the bundled CLI to `~/.local/bin/claude-artifacts`. Make sure `~/.local/bin` is on your `PATH`.
+The installer downloads the bundled CLI from GitHub and writes it to `~/.local/bin/claude-artifacts`.
 
-The installer downloads a single built file from GitHub. It does not use npm, does not clone the repo, and does not need an npm package release.
+Requirements:
 
-Or install from a local checkout:
+- Node.js
+- Claude Code logged in on this machine
+- `~/.local/bin` on your `PATH`
+
+Local checkout install:
 
 ```sh
 git clone git@github.com:kamilio/claude-artifacts.git
@@ -36,7 +36,9 @@ cd claude-artifacts
 npm run install:global
 ```
 
-## Quick Start
+Tested on Node 18 and Node 22. Toolcraft may print npm engine warnings on Node 18 during development installs, but the bundled CLI runs there.
+
+## Quickstart
 
 See what you have:
 
@@ -44,31 +46,25 @@ See what you have:
 claude-artifacts list
 ```
 
-Ship a page:
+Ship a local page:
 
 ```sh
 claude-artifacts create dashboard.html --favicon '*' --title "Launch dashboard"
 ```
 
-Inspect an artifact:
-
-```sh
-claude-artifacts read https://claude.ai/code/artifact/<id>
-```
-
-Download the current HTML:
-
-```sh
-claude-artifacts read <id> --content
-```
-
-Replace it with a new local file:
+Update that artifact later:
 
 ```sh
 claude-artifacts update <id> dashboard.html --favicon '*' --title "Launch dashboard"
 ```
 
-Delete the test junk:
+Download the deployed HTML:
+
+```sh
+claude-artifacts read <id> --content > deployed.html
+```
+
+Delete the experiment:
 
 ```sh
 claude-artifacts delete <id>
@@ -80,20 +76,25 @@ Open the browser gallery:
 claude-artifacts gallery
 ```
 
-## What Is The Key?
+## The Artifact Key
 
-The artifact key is the UUID in the Claude URL:
+Every artifact has a UUID in its Claude URL:
 
 ```text
 https://claude.ai/code/artifact/e2438a48-35b9-46bb-902e-fc59665782e2
                               ^ this part
 ```
 
-Every command accepts either the full URL or just the UUID.
+Commands accept either the full URL or just the UUID:
+
+```sh
+claude-artifacts read https://claude.ai/code/artifact/<id>
+claude-artifacts read <id>
+```
 
 ## Output
 
-The list output is built for scanning:
+`list` is formatted for scanning in a terminal:
 
 ```text
 1. Launch dashboard
@@ -106,40 +107,48 @@ The list output is built for scanning:
    views:   8 total, 1 unique
 ```
 
-## Auth
-
-The CLI reads the same OAuth session Claude Code uses from the macOS keychain item:
-
-```text
-Claude Code-credentials
-```
-
-You need to be logged in with Claude Code first:
-
-```sh
-claude /login
-```
-
-For tests and proxies:
-
-```sh
-CLAUDE_CODE_OAUTH_TOKEN=... claude-artifacts list
-CLAUDE_CODE_ARTIFACTS_API_BASE_URL=http://127.0.0.1:53039 claude-artifacts list
-```
-
 ## Commands
 
 ```sh
 claude-artifacts create <file> --favicon <text> [--title <title>] [--label <label>]
+claude-artifacts list [--limit <n>]
 claude-artifacts read <artifact> [--content] [--content-version <version>]
 claude-artifacts update <artifact> <file> --favicon <text> [--title <title>] [--label <label>] [--base-version <version>]
-claude-artifacts list [--limit <n>]
 claude-artifacts delete <artifact>
 claude-artifacts gallery
 ```
 
 `<file>` must be `.html`, `.htm`, or `.md`.
 
+## Auth
+
+The CLI reads the same OAuth session Claude Code already uses:
+
+- macOS: `Claude Code-credentials` in the keychain
+- Linux and other non-macOS systems: `~/.claude/.credentials.json`
+
+Log in with Claude Code first:
+
+```sh
+claude /login
+```
+
+For proxies and tests:
+
+```sh
+CLAUDE_CODE_OAUTH_TOKEN=... claude-artifacts list
+CLAUDE_CODE_ARTIFACTS_API_BASE_URL=http://127.0.0.1:53039 claude-artifacts list
+```
+
+## Development
+
+```sh
+npm install
+npm test
+```
+
+`npm test` builds the bundled CLI and runs smoke tests against both source and dist.
+
 ## Why
 
-Artifacts are web pages with private Claude URLs. When you already have the file and the artifact id, asking an LLM to republish it is unnecessary. This CLI skips the conversation and performs the operation directly.
+Artifacts are web pages with private Claude URLs. If you already have the file and the artifact id, asking Claude to republish it is unnecessary. This CLI skips the conversation and performs the operation directly.
