@@ -1,0 +1,53 @@
+{
+  "name": "claude-artifacts",
+  "version": "0.1.0",
+  "description": "Direct CRUD for Claude Code artifacts from the terminal.",
+  "type": "module",
+  "bin": {
+    "claude-artifacts": "./bin/claude-artifacts.mjs"
+  },
+  "exports": {
+    ".": "./src/root.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "src",
+    "install.sh",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "install:global": "npm run build && cd \"$(dirname \"$npm_package_json\")\" && npm install -g .",
+    "check": "npm run build",
+    "smoke": "node test/smoke.mjs",
+    "smoke:dist": "CLAUDE_ARTIFACTS_TEST_BIN=dist/claude-artifacts.mjs node test/smoke.mjs",
+    "test": "npm run build && npm run smoke && npm run smoke:dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/kamilio/claude-artifacts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kamilio/claude-artifacts/issues"
+  },
+  "homepage": "https://github.com/kamilio/claude-artifacts#readme",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "artifacts",
+    "toolcraft",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "toolcraft": "^0.0.56"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
