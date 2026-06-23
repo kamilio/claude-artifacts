@@ -21,6 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/kamilio/claude-artifacts/main/insta
 ```
 
 The installer downloads the bundled CLI from GitHub and writes it to `~/.local/bin/claude-artifacts`.
+It also installs `claude-artifacts-mcp` for MCP clients.
 
 Requirements:
 
@@ -35,8 +36,6 @@ git clone git@github.com:kamilio/claude-artifacts.git
 cd claude-artifacts
 npm run install:global
 ```
-
-Tested on Node 18 and Node 22. Toolcraft may print npm engine warnings on Node 18 during development installs, but the bundled CLI runs there.
 
 ## Quickstart
 
@@ -74,6 +73,37 @@ Open the browser gallery:
 
 ```sh
 claude-artifacts gallery
+```
+
+## MCP
+
+The installer includes an MCP stdio server:
+
+```sh
+claude-artifacts-mcp
+```
+
+Example MCP config:
+
+```json
+{
+  "mcpServers": {
+    "claude-artifacts": {
+      "command": "claude-artifacts-mcp"
+    }
+  }
+}
+```
+
+Exposed tools:
+
+```text
+create
+list
+read
+update
+delete
+gallery
 ```
 
 ## The Artifact Key

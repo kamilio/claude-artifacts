@@ -3,8 +3,12 @@ import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 
 await build({
-  entryPoints: ["bin/claude-artifacts.mjs"],
-  outfile: "dist/claude-artifacts.mjs",
+  entryPoints: {
+    "claude-artifacts": "bin/claude-artifacts.mjs",
+    "claude-artifacts-mcp": "bin/claude-artifacts-mcp.mjs",
+  },
+  outdir: "dist",
+  outExtension: { ".js": ".mjs" },
   bundle: true,
   platform: "node",
   target: "node18",
@@ -34,3 +38,4 @@ await build({
 });
 
 await chmod("dist/claude-artifacts.mjs", 0o755);
+await chmod("dist/claude-artifacts-mcp.mjs", 0o755);

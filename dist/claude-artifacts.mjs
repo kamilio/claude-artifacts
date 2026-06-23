@@ -27508,7 +27508,7 @@ var createCommand2 = defineCommand({
   name: "create",
   aliases: ["publish"],
   description: "Publish a new Claude Code artifact from a local file using the current Claude Code login without an LLM turn.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   positional: ["file"],
   params: S.Object(publishParams),
   handler: async ({ params }) => {
@@ -27522,7 +27522,7 @@ var createCommand2 = defineCommand({
 var updateCommand = defineCommand({
   name: "update",
   description: "Publish a new version of an existing Claude Code artifact from a local file.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   positional: ["artifact", "file"],
   params: S.Object({
     artifact: S.String({ description: "Claude Code artifact URL or artifact ID." }),
@@ -27540,7 +27540,7 @@ var updateCommand = defineCommand({
 var readCommand = defineCommand({
   name: "read",
   description: "Read a Claude Code artifact from the Claude frame API.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   positional: ["artifact"],
   params: S.Object({
     artifact: S.String({ description: "Claude Code artifact URL or artifact ID." }),
@@ -27561,7 +27561,7 @@ var readCommand = defineCommand({
 var listCommand = defineCommand({
   name: "list",
   description: "List Claude Code artifacts from the Claude frame API.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   params: S.Object({
     limit: S.Optional(S.Number({ description: "Maximum number of artifacts to request." }))
   }),
@@ -27589,7 +27589,7 @@ var listCommand = defineCommand({
 var deleteCommand = defineCommand({
   name: "delete",
   description: "Delete a Claude Code artifact.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   positional: ["artifact"],
   params: S.Object({
     artifact: S.String({ description: "Claude Code artifact URL or artifact ID." })
@@ -27604,7 +27604,7 @@ var deleteCommand = defineCommand({
 var galleryCommand = defineCommand({
   name: "gallery",
   description: "Return the Claude Code artifacts gallery URL.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   params: S.Object({}),
   handler: async () => ({ url: "https://claude.ai/code/artifacts" }),
   render: { json: renderJson, markdown: (value) => value.url, rich: (value, primitives) => primitives.logger.message(value.url, "") }
@@ -27612,7 +27612,7 @@ var galleryCommand = defineCommand({
 var root = defineGroup({
   name: "claude-artifacts",
   description: "Create Claude Code artifacts with the current Claude Code login.",
-  scope: ["cli", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   children: [
     createCommand2,
     readCommand,
