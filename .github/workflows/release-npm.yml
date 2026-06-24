@@ -18,12 +18,30 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: release-npm
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.14.0
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Smoke release artifacts
+        run: npm run smoke:release
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.14.0
           cache: npm
@@ -35,4 +53,6 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$REMOTE"
           npm version --no-git-tag-version patch
       - run: npm test
+      - name: Smoke release artifacts
+        run: npm run smoke:release
       - run: npm publish --provenance --access public

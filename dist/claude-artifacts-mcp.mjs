@@ -18793,6 +18793,9 @@ var require_ignore = __commonJS({
   }
 });
 
+// bin/claude-artifacts-mcp.mjs
+import { readFileSync as readFileSync2 } from "node:fs";
+
 // node_modules/toolcraft/dist/mcp.js
 import { access as access2, lstat as lstat3, readFile as readFile3, rename as rename3, unlink as unlink3, writeFile as writeFile4 } from "node:fs/promises";
 
@@ -32349,7 +32352,8 @@ var root = defineGroup({
 });
 
 // bin/claude-artifacts-mcp.mjs
-await runMCP(root, { name: "claude-artifacts", version: "0.1.0", approvals: false, casing: "snake", omitRootToolNamePrefix: true });
+var packageJson = JSON.parse(readFileSync2(new URL("../package.json", import.meta.url), "utf8"));
+await runMCP(root, { name: "claude-artifacts", version: packageJson.version, approvals: false, casing: "snake", omitRootToolNamePrefix: true });
 /*! Bundled license information:
 
 uri-template-lite/index.js:

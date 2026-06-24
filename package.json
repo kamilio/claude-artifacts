@@ -25,6 +25,7 @@
     "smoke": "node test/smoke.mjs",
     "smoke:dist": "CLAUDE_ARTIFACTS_TEST_BIN=dist/claude-artifacts.mjs node test/smoke.mjs",
     "smoke:mcp": "node test/mcp-smoke.mjs && CLAUDE_ARTIFACTS_MCP_TEST_BIN=dist/claude-artifacts-mcp.mjs node test/mcp-smoke.mjs",
+    "smoke:release": "npm run build && node dist/claude-artifacts.mjs --help && node dist/claude-artifacts.mjs --version && npm pack --dry-run",
     "test": "npm run build && npm run smoke && npm run smoke:dist && npm run smoke:mcp"
   },
   "repository": {

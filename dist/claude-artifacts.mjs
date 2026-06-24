@@ -11177,6 +11177,9 @@ var require_ignore = __commonJS({
   }
 });
 
+// bin/claude-artifacts.mjs
+import { readFileSync as readFileSync2 } from "node:fs";
+
 // node_modules/toolcraft/dist/cli.js
 import { access as access2, lstat as lstat3, readFile as readFile3, rename as rename3, unlink as unlink3, writeFile as writeFile4 } from "node:fs/promises";
 import path9 from "node:path";
@@ -27624,4 +27627,5 @@ var root = defineGroup({
 });
 
 // bin/claude-artifacts.mjs
-await runCLI(root, { version: "0.1.0", rootUsageName: "claude-artifacts", presets: false, approvals: false, controls: { output: true } });
+var packageJson = JSON.parse(readFileSync2(new URL("../package.json", import.meta.url), "utf8"));
+await runCLI(root, { version: packageJson.version, rootUsageName: "claude-artifacts", presets: false, approvals: false, controls: { output: true } });
