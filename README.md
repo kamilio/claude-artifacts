@@ -110,7 +110,7 @@ claude-artifacts delete <artifact>
 The package also includes an MCP stdio server. You can use it with Claude Code or any other coding agent that supports MCP stdio servers.
 
 ```sh
-claude-artifacts-mcp
+npx claude-artifacts-mcp
 ```
 
 Example MCP config:
@@ -119,7 +119,8 @@ Example MCP config:
 {
   "mcpServers": {
     "claude-artifacts": {
-      "command": "claude-artifacts-mcp"
+      "command": "npx",
+      "args": ["claude-artifacts-mcp"]
     }
   }
 }
