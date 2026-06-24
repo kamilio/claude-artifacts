@@ -2,6 +2,8 @@
 
 Turn local HTML or Markdown into Claude Code artifacts from your terminal.
 
+I love Claude Code artifacts. `claude-artifacts` exists because managing them should be as direct as creating them.
+
 `claude-artifacts` lets you publish, inspect, refresh, download, and clean up Claude Code artifacts without going back through chat. It uses the Claude Code login already on your machine, so there are no extra tokens to manage and no repeated upload dance when all you want is to ship the latest version of a file.
 
 Use it when you want to:
@@ -110,7 +112,7 @@ claude-artifacts delete <artifact>
 The package also includes an MCP stdio server. You can use it with Claude Code or any other coding agent that supports MCP stdio servers.
 
 ```sh
-npx claude-artifacts-mcp
+npx --package claude-artifacts claude-artifacts-mcp
 ```
 
 Example MCP config:
@@ -120,13 +122,13 @@ Example MCP config:
   "mcpServers": {
     "claude-artifacts": {
       "command": "npx",
-      "args": ["claude-artifacts-mcp"]
+      "args": ["-y", "--package", "claude-artifacts", "claude-artifacts-mcp"]
     }
   }
 }
 ```
 
-Available MCP tools:
+Available MCP tools are unprefixed:
 
 ```text
 create
