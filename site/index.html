@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Publish, update, and manage Claude Code artifacts from your terminal. Includes an MCP server for coding agents.">
-    <title>claude-artifacts</title>
+    <meta name="description" content="Claude Code Artifacts CLI for publishing and updating HTML, Markdown, YAML, CSV, JSON, and source files from your terminal. Includes MCP support for coding agents.">
+    <title>claude-artifacts | Claude Code Artifacts CLI</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
@@ -13,9 +13,9 @@
         <img class="hero-visual" src="./assets/hero-preview.png" alt="Terminal showing claude-artifacts publishing and listing Claude Code artifacts">
         <div class="hero-shade" aria-hidden="true"></div>
         <div class="hero-content">
-          <p class="eyebrow">Claude Code artifacts, from your shell</p>
-          <h1 id="hero-title">Ship artifacts without going back through chat.</h1>
-          <p class="lede">Publish local HTML or Markdown, keep the same Claude URL as you iterate, and wire the same workflow into MCP-capable coding agents.</p>
+          <p class="eyebrow">Claude Code Artifacts CLI</p>
+          <h1 id="hero-title">Publish Claude Code artifacts from your terminal.</h1>
+          <p class="lede">Create and update artifacts from HTML, Markdown, YAML, CSV, JSON, and source files. Keep one Claude URL as you iterate, with MCP tools for coding agents.</p>
           <div class="command-row" data-copy-shell>
             <code>npm install -g claude-artifacts</code>
             <button type="button" data-copy="npm install -g claude-artifacts" aria-label="Copy npm install command">Copy</button>
@@ -30,7 +30,7 @@
       <section class="band" id="quickstart" aria-labelledby="quickstart-title">
         <div class="section-head">
           <p class="eyebrow">Fast path</p>
-          <h2 id="quickstart-title">Create, update, inspect.</h2>
+          <h2 id="quickstart-title">Create, render, update.</h2>
         </div>
         <div class="steps">
           <article>
@@ -43,18 +43,18 @@
           </article>
           <article>
             <span class="step-index">02</span>
-            <h3>Keep the URL</h3>
+            <h3>Render data files</h3>
             <div class="copy-line" data-copy-shell>
-              <code>claude-artifacts update &lt;id&gt; dashboard.html --title "Launch dashboard"</code>
-              <button type="button" data-copy='claude-artifacts update <id> dashboard.html --title "Launch dashboard"' aria-label="Copy update command">Copy</button>
+              <code>claude-artifacts create metrics.csv --title "Metrics export"</code>
+              <button type="button" data-copy='claude-artifacts create metrics.csv --title "Metrics export"' aria-label="Copy CSV create command">Copy</button>
             </div>
           </article>
           <article>
             <span class="step-index">03</span>
-            <h3>Read it back</h3>
+            <h3>Keep the URL</h3>
             <div class="copy-line" data-copy-shell>
-              <code>claude-artifacts read &lt;id&gt; --content &gt; deployed.html</code>
-              <button type="button" data-copy="claude-artifacts read <id> --content > deployed.html" aria-label="Copy read command">Copy</button>
+              <code>claude-artifacts update &lt;id&gt; config.yaml --title "Runtime config"</code>
+              <button type="button" data-copy='claude-artifacts update <id> config.yaml --title "Runtime config"' aria-label="Copy update command">Copy</button>
             </div>
           </article>
         </div>
@@ -63,13 +63,13 @@
       <section class="band compact" aria-labelledby="why-title">
         <div class="section-head">
           <p class="eyebrow">Why it exists</p>
-          <h2 id="why-title">Artifacts are great. Re-uploading by hand is not.</h2>
+          <h2 id="why-title">A faster path from local files to Claude artifacts.</h2>
         </div>
         <div class="feature-grid">
           <p>Uses your existing Claude Code login.</p>
-          <p>Accepts full artifact URLs or UUIDs.</p>
-          <p>Lists URLs, owners, views, and gallery link.</p>
-          <p>Ships an MCP server for other coding agents.</p>
+          <p>Renders Markdown with Toolcraft HTML output.</p>
+          <p>Turns YAML, CSV, JSON, and source files into readable artifact pages.</p>
+          <p>Ships prefixed MCP tools for Claude Code, Codex, Cursor, and other agents.</p>
         </div>
       </section>
 
