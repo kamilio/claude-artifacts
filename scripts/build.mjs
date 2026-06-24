@@ -1,4 +1,4 @@
-import { chmod } from "node:fs/promises";
+import { chmod, copyFile } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 
@@ -39,3 +39,4 @@ await build({
 
 await chmod("dist/claude-artifacts.mjs", 0o755);
 await chmod("dist/claude-artifacts-mcp.mjs", 0o755);
+await copyFile("src/artifact.css", "dist/artifact.css");

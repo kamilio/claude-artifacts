@@ -14,7 +14,6 @@
     "bin",
     "dist",
     "src",
-    "install.sh",
     "README.md",
     "LICENSE"
   ],
@@ -46,7 +45,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "toolcraft": "^0.0.56"
+    "toolcraft": "^0.0.78"
   },
   "devDependencies": {
     "esbuild": "^0.25.12"

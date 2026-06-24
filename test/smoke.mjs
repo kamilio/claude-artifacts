@@ -71,10 +71,45 @@ function run(args) {
 
 const created = await run(["create", "test/smoke.html", "--title", "Smoke Artifact"]);
 if (created.artifact_id !== artifactId) throw new Error(`create id ${created.artifact_id}`);
+const htmlDeploy = requests.at(-1).body;
+if (!htmlDeploy.content.includes("<h1>Smoke Artifact</h1>")) throw new Error("html body not uploaded");
+
+await run(["create", "test/smoke.md", "--title", "Smoke Markdown"]);
+const markdownDeploy = requests.at(-1).body;
+if (!markdownDeploy.content.includes("max-width: 760px")) throw new Error("artifact css not bundled");
+if (!markdownDeploy.content.includes("font: 14px/1.5 ui-rounded")) throw new Error("referenced artifact font style missing");
+if (!markdownDeploy.content.includes("<h1>Smoke Markdown</h1>")) throw new Error("markdown heading not rendered");
+if (!markdownDeploy.content.includes("<ul><li>alpha</li><li>beta</li></ul>")) throw new Error("markdown list not rendered");
+
+await run(["create", "test/smoke.yaml", "--title", "Smoke YAML"]);
+const yamlDeploy = requests.at(-1).body;
+if (!yamlDeploy.content.includes('<code class="language-yaml">')) throw new Error("yaml fence language missing");
+if (!yamlDeploy.content.includes("items:\n  - alpha")) throw new Error("yaml content missing");
+
+await run(["create", "test/smoke.csv", "--title", "Smoke CSV"]);
+const csvDeploy = requests.at(-1).body;
+if (!csvDeploy.content.includes('<code class="language-csv">')) throw new Error("csv fence language missing");
+if (!csvDeploy.content.includes("name,count\nalpha,1")) throw new Error("csv content missing");
+
+await run(["create", "test/smoke.json", "--title", "Smoke JSON"]);
+const jsonDeploy = requests.at(-1).body;
+if (!jsonDeploy.content.includes('<code class="language-json">')) throw new Error("json fence language missing");
+if (!jsonDeploy.content.includes('&quot;enabled&quot;: true')) throw new Error("json content not escaped");
+
+await run(["create", "test/smoke.js", "--title", "Smoke JS"]);
+const jsDeploy = requests.at(-1).body;
+if (!jsDeploy.content.includes('<code class="language-js">')) throw new Error("js fence language missing");
+if (!jsDeploy.content.includes("&lt;safe&gt;")) throw new Error("js content not escaped");
+
+await run(["create", "test/smoke.txt", "--title", "Smoke Text"]);
+const textDeploy = requests.at(-1).body;
+if (!textDeploy.content.includes('<code class="language-text">')) throw new Error("text fence language missing");
+if (!textDeploy.content.includes('console.log(&quot;nested&quot;);')) throw new Error("nested code fence content not escaped");
+
 const read = await run(["read", artifactId]);
 if (read.title !== "Smoke Artifact") throw new Error(`read title ${read.title}`);
 const updated = await run(["update", artifactId, "test/smoke.html", "--title", "Smoke Artifact Updated", "--base-version", created.version]);
-if (updated.version !== "version-2") throw new Error(`update version ${updated.version}`);
+if (updated.version !== "version-8") throw new Error(`update version ${updated.version}`);
 const listed = await run(["list"]);
 if (listed.artifacts.length !== 1 || listed.artifacts[0].artifact_id !== artifactId) throw new Error("list missing artifact");
 if (listed.gallery_url !== "https://claude.ai/code/artifacts") throw new Error(`gallery ${listed.gallery_url}`);

@@ -5,11 +5,35 @@ import { basename, extname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { defineCommand, defineGroup, S } from "toolcraft";
+import { renderMarkdownHtml } from "toolcraft/design/render-markdown-html";
 
 const artifactIdPattern = /^[0-9a-fA-F-]{36}$/;
 const execFilePromise = promisify(execFile);
-const artifactShellStyle = "<style>:root{color-scheme:light}body{margin:0;padding:20px;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style>";
+const artifactCss = await readFile(new URL("./artifact.css", import.meta.url), "utf8");
 const artifactsGalleryUrl = "https://claude.ai/code/artifacts";
+const codeLanguageByExtension = new Map([
+  [".cjs", "js"],
+  [".css", "css"],
+  [".csv", "csv"],
+  [".env", "sh"],
+  [".js", "js"],
+  [".json", "json"],
+  [".jsonc", "jsonc"],
+  [".jsx", "jsx"],
+  [".log", "text"],
+  [".mjs", "js"],
+  [".py", "python"],
+  [".rb", "ruby"],
+  [".sh", "sh"],
+  [".sql", "sql"],
+  [".toml", "toml"],
+  [".ts", "ts"],
+  [".tsx", "tsx"],
+  [".txt", "text"],
+  [".xml", "xml"],
+  [".yaml", "yaml"],
+  [".yml", "yaml"],
+]);
 
 function artifactId(value) {
   if (artifactIdPattern.test(value)) return value;
@@ -25,74 +49,29 @@ function lineText(value) {
 function sourceKind(path) {
   const extension = extname(path).toLowerCase();
   if (extension === ".html" || extension === ".htm") return "html";
-  if (extension === ".md") return "markdown";
-  throw new Error(`Claude Code artifacts can publish .html, .htm, or .md files: ${path}`);
+  if (extension === ".md" || extension === ".markdown") return "markdown";
+  return "code";
+}
+
+function sourceLanguage(path) {
+  const extension = extname(path).toLowerCase();
+  if (extension === "") return "text";
+  return codeLanguageByExtension.get(extension) ?? (extension.slice(1).replace(/[^a-z0-9_+-]/gi, "") || "text");
 }
 
 async function validateArtifactSource(file) {
   const path = resolve(file);
   const fileStat = await stat(path);
-  const contents = await readFile(path, "utf8");
   const kind = sourceKind(path);
-  const externalRequests = kind === "html" ? [...contents.matchAll(/\b(?:src|href)\s*=\s*["']https?:\/\//gi)].map((match) => match[0]) : [];
-  const dynamicRequests = kind === "html" ? [...contents.matchAll(/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/g)].map((match) => match[0]) : [];
+  const language = kind === "code" ? sourceLanguage(path) : undefined;
   return {
     path,
     kind,
+    language,
     bytes: fileStat.size,
     under_size_limit: fileStat.size <= 16 * 1024 * 1024,
-    external_reference_count: externalRequests.length,
-    dynamic_request_count: dynamicRequests.length,
     publishable: fileStat.size <= 16 * 1024 * 1024,
   };
-}
-
-function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function markdownToHtml(markdown) {
-  const lines = markdown.split(/\r?\n/);
-  const html = [];
-  let inList = false;
-  let inCode = false;
-  const closeList = () => {
-    if (inList) {
-      html.push("</ul>");
-      inList = false;
-    }
-  };
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      closeList();
-      html.push(inCode ? "</code></pre>" : "<pre><code>");
-      inCode = !inCode;
-    } else if (inCode) {
-      html.push(escapeHtml(line));
-    } else if (/^#{1,6}\s+/.test(line)) {
-      closeList();
-      const level = line.match(/^#+/)[0].length;
-      html.push(`<h${level}>${escapeHtml(line.slice(level).trim())}</h${level}>`);
-    } else if (/^\s*[-*]\s+/.test(line)) {
-      if (!inList) {
-        html.push("<ul>");
-        inList = true;
-      }
-      html.push(`<li>${escapeHtml(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
-    } else if (line.trim() === "") {
-      closeList();
-    } else {
-      closeList();
-      html.push(`<p>${escapeHtml(line.trim())}</p>`);
-    }
-  }
-  closeList();
-  if (inCode) html.push("</code></pre>");
-  return html.join("\n");
 }
 
 function htmlTitle(contents) {
@@ -101,13 +80,24 @@ function htmlTitle(contents) {
   return lineText(match[1].replace(/<[^>]*>/g, ""));
 }
 
-async function artifactContent(path, kind) {
+function pageHtml(bodyHtml) {
+  return `<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>${artifactCss}</style></head><body>\n${bodyHtml}\n</body></html>`;
+}
+
+function fencedMarkdown(source, language) {
+  const longestBacktickRun = Math.max(2, ...[...source.matchAll(/`+/g)].map((match) => match[0].length));
+  const fence = "`".repeat(longestBacktickRun + 1);
+  return `${fence}${language}\n${source.replace(/\s*$/, "\n")}${fence}`;
+}
+
+async function artifactContent(path, kind, language) {
   const source = await readFile(path, "utf8");
   if (kind === "markdown") {
-    return `<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1">${artifactShellStyle}</head><body>\n${markdownToHtml(source)}\n</body></html>`;
+    return pageHtml(renderMarkdownHtml(source));
   }
   if (/<!doctype\s+html/i.test(source) || /<html[\s>]/i.test(source)) return source;
-  return `<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1">${artifactShellStyle}</head><body>\n${source}\n</body></html>`;
+  if (kind === "html") return pageHtml(source);
+  return pageHtml(renderMarkdownHtml(fencedMarkdown(source, language ?? "text")));
 }
 
 async function artifactTitle(path, title) {
@@ -175,8 +165,8 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, slug, title, favicon = "*", label, baseVersion) {
-  const content = await artifactContent(path, kind);
+async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion) {
+  const content = await artifactContent(path, kind, language);
   const body = {
     title: await artifactTitle(path, title),
     favicon,
@@ -263,7 +253,7 @@ function renderDelete(value) {
 }
 
 const publishParams = {
-  file: S.String({ description: "Local .html, .htm, or .md file to publish." }),
+  file: S.String({ description: "Local HTML, Markdown, or text/code data file to publish." }),
   favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the HTML title or file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." })),
@@ -279,7 +269,7 @@ const createCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, undefined, params.title, params.favicon, params.label, undefined);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined);
     return { ...published, source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -298,7 +288,7 @@ const updateCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion);
     return { ...published, artifact_id: artifactId(params.artifact), source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },

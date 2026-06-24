@@ -1,0 +1,5 @@
+This file contains a code fence:
+
+```js
+console.log("nested");
+```

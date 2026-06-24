@@ -2,11 +2,11 @@
 
 Publish Claude Code artifacts from your terminal.
 
-I love Claude Code artifacts. `claude-artifacts` exists because sharing and updating them should be as direct as creating them. Point it at local HTML or Markdown, get a Claude artifact URL, and keep updating that same URL without going back through chat.
+I love Claude Code artifacts. `claude-artifacts` exists because sharing and updating them should be as direct as creating them. Point it at local HTML, Markdown, YAML, CSV, JSON, source code, or another text file, get a Claude artifact URL, and keep updating that same URL without going back through chat.
 
 ## What You Can Do
 
-- Publish local `.html`, `.htm`, or `.md` files as Claude Code artifacts.
+- Publish local HTML, Markdown, data files, source files, and other text files as Claude Code artifacts.
 - Update an existing artifact without changing its URL.
 - List your Claude Code artifacts with URLs, owners, view counts, and the gallery link.
 - Download the live artifact HTML when you need to inspect or archive it.
@@ -30,6 +30,13 @@ Publish a page:
 
 ```sh
 claude-artifacts create dashboard.html --title "Launch dashboard"
+```
+
+Publish data or source files too:
+
+```sh
+claude-artifacts create config.yaml --title "Runtime config"
+claude-artifacts create metrics.csv --title "Metrics export"
 ```
 
 List your artifacts:
