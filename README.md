@@ -1,114 +1,86 @@
 # claude-artifacts
 
-Publish, list, update, read, and delete Claude Code artifacts from your terminal.
+Turn local HTML or Markdown into Claude Code artifacts from your terminal.
 
-Claude Code artifacts are great once they exist. Managing them through a chat window is the slow part.
+`claude-artifacts` lets you publish, inspect, refresh, download, and clean up Claude Code artifacts without going back through chat. It uses the Claude Code login already on your machine, so there are no extra tokens to manage and no repeated upload dance when all you want is to ship the latest version of a file.
 
-`claude-artifacts` is a small CLI that talks directly to the same artifact API behind `https://claude.ai/code/artifacts`. It reuses your existing Claude Code login, so there is no pasted token, no separate API key, and no LLM turn just to upload a file.
+Use it when you want to:
 
-- Ship local HTML or Markdown as a Claude artifact.
-- List only artifacts created from Claude Code.
-- Download the current artifact HTML.
-- Replace an artifact without changing its URL.
-- Delete throwaway test artifacts from the shell.
+- Share a local prototype, report, dashboard, or write-up as a Claude artifact.
+- Update an artifact while keeping the same Claude URL.
+- Download the live artifact HTML for review or archiving.
+- Browse your artifact gallery from the shell.
+- Give MCP clients a simple way to manage artifacts.
 
 ## Install
 
-One command. No npm package install. No repo clone.
+Install from npm:
+
+```sh
+npm install -g claude-artifacts
+```
+
+Or use the standalone installer:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/kamilio/claude-artifacts/main/install.sh | bash
 ```
 
-The installer downloads the bundled CLI from GitHub and writes it to `~/.local/bin/claude-artifacts`.
-It also installs `claude-artifacts-mcp` for MCP clients.
+The installer places `claude-artifacts` and `claude-artifacts-mcp` in `~/.local/bin`.
 
 Requirements:
 
-- Node.js
+- Node.js 18 or newer
 - Claude Code logged in on this machine
-- `~/.local/bin` on your `PATH`
+- `~/.local/bin` on your `PATH` when using the standalone installer
 
-Local checkout install:
+If you need to log in first:
 
 ```sh
-git clone git@github.com:kamilio/claude-artifacts.git
-cd claude-artifacts
-npm run install:global
+claude /login
 ```
 
 ## Quickstart
 
-See what you have:
+List your artifacts:
 
 ```sh
 claude-artifacts list
 ```
 
-Ship a local page:
+Publish a local page:
 
 ```sh
 claude-artifacts create dashboard.html --favicon '*' --title "Launch dashboard"
 ```
 
-Update that artifact later:
+Update the same artifact later without changing its URL:
 
 ```sh
 claude-artifacts update <id> dashboard.html --favicon '*' --title "Launch dashboard"
 ```
 
-Download the deployed HTML:
+Download the current artifact HTML:
 
 ```sh
 claude-artifacts read <id> --content > deployed.html
 ```
 
-Delete the experiment:
-
-```sh
-claude-artifacts delete <id>
-```
-
-Open the browser gallery:
+Open your artifact gallery:
 
 ```sh
 claude-artifacts gallery
 ```
 
-## MCP
-
-The installer includes an MCP stdio server:
+Remove an artifact you no longer need:
 
 ```sh
-claude-artifacts-mcp
+claude-artifacts delete <id>
 ```
 
-Example MCP config:
+## Artifact IDs
 
-```json
-{
-  "mcpServers": {
-    "claude-artifacts": {
-      "command": "claude-artifacts-mcp"
-    }
-  }
-}
-```
-
-Exposed tools:
-
-```text
-create
-list
-read
-update
-delete
-gallery
-```
-
-## The Artifact Key
-
-Every artifact has a UUID in its Claude URL:
+Every artifact URL includes a UUID:
 
 ```text
 https://claude.ai/code/artifact/e2438a48-35b9-46bb-902e-fc59665782e2
@@ -124,7 +96,7 @@ claude-artifacts read <id>
 
 ## Output
 
-`list` is formatted for scanning in a terminal:
+`list` is formatted for quick scanning:
 
 ```text
 1. Launch dashboard
@@ -150,18 +122,43 @@ claude-artifacts gallery
 
 `<file>` must be `.html`, `.htm`, or `.md`.
 
+## MCP
+
+The package also includes an MCP stdio server:
+
+```sh
+claude-artifacts-mcp
+```
+
+Example MCP config:
+
+```json
+{
+  "mcpServers": {
+    "claude-artifacts": {
+      "command": "claude-artifacts-mcp"
+    }
+  }
+}
+```
+
+Available MCP tools:
+
+```text
+create
+list
+read
+update
+delete
+gallery
+```
+
 ## Auth
 
 The CLI reads the same OAuth session Claude Code already uses:
 
 - macOS: `Claude Code-credentials` in the keychain
 - Linux and other non-macOS systems: `~/.claude/.credentials.json`
-
-Log in with Claude Code first:
-
-```sh
-claude /login
-```
 
 For proxies and tests:
 
@@ -170,15 +167,13 @@ CLAUDE_CODE_OAUTH_TOKEN=... claude-artifacts list
 CLAUDE_CODE_ARTIFACTS_API_BASE_URL=http://127.0.0.1:53039 claude-artifacts list
 ```
 
-## Development
+## Local Development
 
 ```sh
+git clone git@github.com:kamilio/claude-artifacts.git
+cd claude-artifacts
 npm install
 npm test
 ```
 
-`npm test` builds the bundled CLI and runs smoke tests against both source and dist.
-
-## Why
-
-Artifacts are web pages with private Claude URLs. If you already have the file and the artifact id, asking Claude to republish it is unnecessary. This CLI skips the conversation and performs the operation directly.
+`npm test` builds the bundled CLI and runs smoke tests against both source and bundled output.

@@ -1,0 +1,38 @@
+name: release-npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - bin/**
+      - src/**
+      - scripts/**
+      - test/**
+      - README.md
+      - LICENSE
+      - .github/workflows/release-npm.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+      - run: npm install --global npm@^11.5.1
+      - run: npm ci
+      - name: Align and bump version
+        run: |
+          REMOTE=$(npm view claude-artifacts version 2>/dev/null || echo "0.0.0")
+          npm version --no-git-tag-version --allow-same-version "$REMOTE"
+          npm version --no-git-tag-version patch
+      - run: npm test
+      - run: npm publish --provenance --access public

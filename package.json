@@ -1,11 +1,11 @@
 {
   "name": "claude-artifacts",
   "version": "0.1.0",
-  "description": "Direct CRUD for Claude Code artifacts from the terminal.",
+  "description": "Manage Claude Code artifacts from your terminal.",
   "type": "module",
   "bin": {
-    "claude-artifacts": "./bin/claude-artifacts.mjs",
-    "claude-artifacts-mcp": "./bin/claude-artifacts-mcp.mjs"
+    "claude-artifacts": "bin/claude-artifacts.mjs",
+    "claude-artifacts-mcp": "bin/claude-artifacts-mcp.mjs"
   },
   "exports": {
     ".": "./src/root.js"
@@ -29,7 +29,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/kamilio/claude-artifacts.git"
+    "url": "git+https://github.com/kamilio/claude-artifacts.git"
   },
   "bugs": {
     "url": "https://github.com/kamilio/claude-artifacts/issues"
