@@ -20,19 +20,10 @@ Install from npm:
 npm install -g claude-artifacts
 ```
 
-Or use the standalone installer:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/kamilio/claude-artifacts/main/install.sh | bash
-```
-
-The installer places `claude-artifacts` and `claude-artifacts-mcp` in `~/.local/bin`.
-
 Requirements:
 
 - Node.js 18 or newer
 - Claude Code logged in on this machine
-- `~/.local/bin` on your `PATH` when using the standalone installer
 
 If you need to log in first:
 
