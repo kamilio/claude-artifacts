@@ -11,6 +11,7 @@ const artifactIdPattern = /^[0-9a-fA-F-]{36}$/;
 const execFilePromise = promisify(execFile);
 const artifactCss = await readFile(new URL("./artifact.css", import.meta.url), "utf8");
 const artifactsGalleryUrl = "https://claude.ai/code/artifacts";
+const markdownHtmlOptions = { syntaxHighlight: true };
 const codeLanguageByExtension = new Map([
   [".cjs", "js"],
   [".css", "css"],
@@ -93,11 +94,11 @@ function fencedMarkdown(source, language) {
 async function artifactContent(path, kind, language) {
   const source = await readFile(path, "utf8");
   if (kind === "markdown") {
-    return pageHtml(renderMarkdownHtml(source));
+    return pageHtml(renderMarkdownHtml(source, markdownHtmlOptions));
   }
   if (/<!doctype\s+html/i.test(source) || /<html[\s>]/i.test(source)) return source;
   if (kind === "html") return pageHtml(source);
-  return pageHtml(renderMarkdownHtml(fencedMarkdown(source, language ?? "text")));
+  return pageHtml(renderMarkdownHtml(fencedMarkdown(source, language ?? "text"), markdownHtmlOptions));
 }
 
 async function artifactTitle(path, title) {

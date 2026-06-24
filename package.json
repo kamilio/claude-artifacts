@@ -45,7 +45,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "toolcraft": "^0.0.78"
+    "toolcraft": "^0.0.83"
   },
   "devDependencies": {
     "esbuild": "^0.25.12"

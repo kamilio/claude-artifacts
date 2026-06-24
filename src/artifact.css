@@ -70,6 +70,46 @@ pre code {
   padding: 0;
 }
 
+.tc-token-keyword,
+.tc-token-command {
+  color: #8f3f71;
+  font-weight: 600;
+}
+
+.tc-token-string,
+.tc-token-template {
+  color: #7a4d00;
+}
+
+.tc-token-comment {
+  color: #77736a;
+  font-style: italic;
+}
+
+.tc-token-number,
+.tc-token-boolean,
+.tc-token-null {
+  color: #006f6b;
+}
+
+.tc-token-key,
+.tc-token-property,
+.tc-token-attribute {
+  color: #9d4b2d;
+}
+
+.tc-token-type,
+.tc-token-class,
+.tc-token-decorator,
+.tc-token-function {
+  color: #2f6687;
+}
+
+.tc-token-tag,
+.tc-token-selector {
+  color: #356d39;
+}
+
 blockquote {
   border-left: 3px solid #d97757;
   margin: 0.6em 0;

@@ -69,42 +69,67 @@ function run(args) {
   });
 }
 
+function requireIncludes(content, needle, message) {
+  if (!content.includes(needle)) throw new Error(message);
+}
+
+function requireToken(content, token, message) {
+  requireIncludes(content, `class="tc-token-${token}"`, message);
+}
+
+function includesHighlightedSpan(content) {
+  return content.includes('<span class="tc-token-');
+}
+
 const created = await run(["create", "test/smoke.html", "--title", "Smoke Artifact"]);
 if (created.artifact_id !== artifactId) throw new Error(`create id ${created.artifact_id}`);
 const htmlDeploy = requests.at(-1).body;
-if (!htmlDeploy.content.includes("<h1>Smoke Artifact</h1>")) throw new Error("html body not uploaded");
+requireIncludes(htmlDeploy.content, "<h1>Smoke Artifact</h1>", "html body not uploaded");
 
 await run(["create", "test/smoke.md", "--title", "Smoke Markdown"]);
 const markdownDeploy = requests.at(-1).body;
-if (!markdownDeploy.content.includes("max-width: 760px")) throw new Error("artifact css not bundled");
-if (!markdownDeploy.content.includes("font: 14px/1.5 ui-rounded")) throw new Error("referenced artifact font style missing");
-if (!markdownDeploy.content.includes("<h1>Smoke Markdown</h1>")) throw new Error("markdown heading not rendered");
-if (!markdownDeploy.content.includes("<ul><li>alpha</li><li>beta</li></ul>")) throw new Error("markdown list not rendered");
+requireIncludes(markdownDeploy.content, "max-width: 760px", "artifact css not bundled");
+requireIncludes(markdownDeploy.content, "font: 14px/1.5 ui-rounded", "referenced artifact font style missing");
+requireIncludes(markdownDeploy.content, ".tc-token-keyword", "syntax highlight css not bundled");
+requireIncludes(markdownDeploy.content, "<h1>Smoke Markdown</h1>", "markdown heading not rendered");
+requireIncludes(markdownDeploy.content, "<ul><li>alpha</li><li>beta</li></ul>", "markdown list not rendered");
+requireIncludes(markdownDeploy.content, '<code class="language-ts">', "markdown code fence language missing");
+requireToken(markdownDeploy.content, "keyword", "markdown code keyword token missing");
+requireToken(markdownDeploy.content, "type", "markdown code type token missing");
+requireToken(markdownDeploy.content, "boolean", "markdown code boolean token missing");
 
 await run(["create", "test/smoke.yaml", "--title", "Smoke YAML"]);
 const yamlDeploy = requests.at(-1).body;
-if (!yamlDeploy.content.includes('<code class="language-yaml">')) throw new Error("yaml fence language missing");
-if (!yamlDeploy.content.includes("items:\n  - alpha")) throw new Error("yaml content missing");
+requireIncludes(yamlDeploy.content, '<code class="language-yaml">', "yaml fence language missing");
+requireToken(yamlDeploy.content, "key", "yaml key token missing");
+requireIncludes(yamlDeploy.content, "  - alpha", "yaml content missing");
 
 await run(["create", "test/smoke.csv", "--title", "Smoke CSV"]);
 const csvDeploy = requests.at(-1).body;
-if (!csvDeploy.content.includes('<code class="language-csv">')) throw new Error("csv fence language missing");
-if (!csvDeploy.content.includes("name,count\nalpha,1")) throw new Error("csv content missing");
+requireIncludes(csvDeploy.content, '<code class="language-csv">', "csv fence language missing");
+requireIncludes(csvDeploy.content, "name,count\nalpha,1", "csv content missing");
+if (includesHighlightedSpan(csvDeploy.content)) throw new Error("csv should render as plain escaped code");
 
 await run(["create", "test/smoke.json", "--title", "Smoke JSON"]);
 const jsonDeploy = requests.at(-1).body;
-if (!jsonDeploy.content.includes('<code class="language-json">')) throw new Error("json fence language missing");
-if (!jsonDeploy.content.includes('&quot;enabled&quot;: true')) throw new Error("json content not escaped");
+requireIncludes(jsonDeploy.content, '<code class="language-json">', "json fence language missing");
+requireToken(jsonDeploy.content, "key", "json key token missing");
+requireToken(jsonDeploy.content, "string", "json string token missing");
+requireToken(jsonDeploy.content, "boolean", "json boolean token missing");
+requireIncludes(jsonDeploy.content, "&quot;enabled&quot;", "json content not escaped");
 
 await run(["create", "test/smoke.js", "--title", "Smoke JS"]);
 const jsDeploy = requests.at(-1).body;
-if (!jsDeploy.content.includes('<code class="language-js">')) throw new Error("js fence language missing");
-if (!jsDeploy.content.includes("&lt;safe&gt;")) throw new Error("js content not escaped");
+requireIncludes(jsDeploy.content, '<code class="language-js">', "js fence language missing");
+requireToken(jsDeploy.content, "keyword", "js keyword token missing");
+requireToken(jsDeploy.content, "string", "js string token missing");
+requireIncludes(jsDeploy.content, "&lt;safe&gt;", "js content not escaped");
 
 await run(["create", "test/smoke.txt", "--title", "Smoke Text"]);
 const textDeploy = requests.at(-1).body;
-if (!textDeploy.content.includes('<code class="language-text">')) throw new Error("text fence language missing");
-if (!textDeploy.content.includes('console.log(&quot;nested&quot;);')) throw new Error("nested code fence content not escaped");
+requireIncludes(textDeploy.content, '<code class="language-text">', "text fence language missing");
+requireIncludes(textDeploy.content, 'console.log(&quot;nested&quot;);', "nested code fence content not escaped");
+if (includesHighlightedSpan(textDeploy.content)) throw new Error("text should render as plain escaped code");
 
 const read = await run(["read", artifactId]);
 if (read.title !== "Smoke Artifact") throw new Error(`read title ${read.title}`);

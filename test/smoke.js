@@ -1,2 +1,3 @@
+const label = "demo";
 const message = `<safe>`;
-console.log(message);
+console.log(label, message);
