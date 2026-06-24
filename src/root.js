@@ -9,6 +9,7 @@ import { defineCommand, defineGroup, S } from "toolcraft";
 const artifactIdPattern = /^[0-9a-fA-F-]{36}$/;
 const execFilePromise = promisify(execFile);
 const artifactShellStyle = "<style>:root{color-scheme:light}body{margin:0;padding:20px;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style>";
+const artifactsGalleryUrl = "https://claude.ai/code/artifacts";
 
 function artifactId(value) {
   if (artifactIdPattern.test(value)) return value;
@@ -174,7 +175,7 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, slug, title, favicon, label, baseVersion) {
+async function publishDirect(path, kind, slug, title, favicon = "*", label, baseVersion) {
   const content = await artifactContent(path, kind);
   const body = {
     title: await artifactTitle(path, title),
@@ -239,17 +240,22 @@ function renderRead(value) {
 }
 
 function renderList(value) {
-  if (value.artifacts.length === 0) return "no code artifacts";
-  return value.artifacts.map((artifact, index) => renderLines([
-    `${index + 1}. ${artifact.title ?? "(untitled)"}`,
-    `   id:      ${artifact.artifact_id}`,
-    `   url:     ${artifact.artifact_url}`,
-    `   updated: ${artifact.updated_at_display}`,
-    artifact.label !== undefined ? `   label:   ${artifact.label}` : "",
-    `   owner:   ${artifact.owner_email}`,
-    `   access:  ${artifact.relation}`,
-    `   views:   ${artifact.view_count} total, ${artifact.unique_view_count} unique`,
-  ])).join("\n\n");
+  const galleryLine = `gallery: ${value.gallery_url}`;
+  if (value.artifacts.length === 0) return renderLines([galleryLine, "no code artifacts"]);
+  return renderLines([
+    galleryLine,
+    "",
+    value.artifacts.map((artifact, index) => renderLines([
+      `${index + 1}. ${artifact.title ?? "(untitled)"}`,
+      `   id:      ${artifact.artifact_id}`,
+      `   url:     ${artifact.artifact_url}`,
+      `   updated: ${artifact.updated_at_display}`,
+      artifact.label !== undefined ? `   label:   ${artifact.label}` : "",
+      `   owner:   ${artifact.owner_email}`,
+      `   access:  ${artifact.relation}`,
+      `   views:   ${artifact.view_count} total, ${artifact.unique_view_count} unique`,
+    ])).join("\n\n"),
+  ]);
 }
 
 function renderDelete(value) {
@@ -258,7 +264,7 @@ function renderDelete(value) {
 
 const publishParams = {
   file: S.String({ description: "Local .html, .htm, or .md file to publish." }),
-  favicon: S.String({ description: "One or two emoji for the artifact browser-tab icon." }),
+  favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the HTML title or file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." })),
 };
@@ -267,7 +273,7 @@ const createCommand = defineCommand({
   name: "create",
   aliases: ["publish"],
   description: "Publish a new Claude Code artifact from a local file using the current Claude Code login without an LLM turn.",
-    scope: ["cli", "mcp", "sdk"],
+  scope: ["cli", "mcp", "sdk"],
   positional: ["file"],
   params: S.Object(publishParams),
   handler: async ({ params }) => {
@@ -345,7 +351,7 @@ const listCommand = defineCommand({
         updated_at: frame["updatedAt"],
         updated_at_display: formatTimestamp(frame["updatedAt"]),
       }));
-    return { artifacts };
+    return { gallery_url: artifactsGalleryUrl, artifacts };
   },
   render: { json: renderJson, markdown: renderList, rich: (value) => process.stdout.write(`${renderList(value)}\n`) },
 });
@@ -366,15 +372,6 @@ const deleteCommand = defineCommand({
   render: { json: renderJson, markdown: renderDelete, rich: (value, primitives) => primitives.logger.message(renderDelete(value), "") },
 });
 
-const galleryCommand = defineCommand({
-  name: "gallery",
-  description: "Return the Claude Code artifacts gallery URL.",
-  scope: ["cli", "mcp", "sdk"],
-  params: S.Object({}),
-  handler: async () => ({ url: "https://claude.ai/code/artifacts" }),
-  render: { json: renderJson, markdown: (value) => value.url, rich: (value, primitives) => primitives.logger.message(value.url, "") },
-});
-
 export const root = defineGroup({
   name: "claude-artifacts",
   description: "Create Claude Code artifacts with the current Claude Code login.",
@@ -385,6 +382,5 @@ export const root = defineGroup({
     updateCommand,
     listCommand,
     deleteCommand,
-    galleryCommand,
   ],
 });

@@ -69,16 +69,15 @@ function run(args) {
   });
 }
 
-const created = await run(["create", "test/smoke.html", "--favicon", "*", "--title", "Smoke Artifact"]);
+const created = await run(["create", "test/smoke.html", "--title", "Smoke Artifact"]);
 if (created.artifact_id !== artifactId) throw new Error(`create id ${created.artifact_id}`);
 const read = await run(["read", artifactId]);
 if (read.title !== "Smoke Artifact") throw new Error(`read title ${read.title}`);
-const updated = await run(["update", artifactId, "test/smoke.html", "--favicon", "*", "--title", "Smoke Artifact Updated", "--base-version", created.version]);
+const updated = await run(["update", artifactId, "test/smoke.html", "--title", "Smoke Artifact Updated", "--base-version", created.version]);
 if (updated.version !== "version-2") throw new Error(`update version ${updated.version}`);
 const listed = await run(["list"]);
 if (listed.artifacts.length !== 1 || listed.artifacts[0].artifact_id !== artifactId) throw new Error("list missing artifact");
-const gallery = await run(["gallery"]);
-if (gallery.url !== "https://claude.ai/code/artifacts") throw new Error(`gallery ${gallery.url}`);
+if (listed.gallery_url !== "https://claude.ai/code/artifacts") throw new Error(`gallery ${listed.gallery_url}`);
 const removed = await run(["delete", artifactId]);
 if (removed.deleted !== true) throw new Error("delete failed");
 const afterDelete = await run(["list"]);

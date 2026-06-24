@@ -32002,6 +32002,7 @@ import { promisify as promisify2 } from "node:util";
 var artifactIdPattern = /^[0-9a-fA-F-]{36}$/;
 var execFilePromise = promisify2(execFile2);
 var artifactShellStyle = "<style>:root{color-scheme:light}body{margin:0;padding:20px;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style>";
+var artifactsGalleryUrl = "https://claude.ai/code/artifacts";
 function artifactId(value) {
   if (artifactIdPattern.test(value)) return value;
   const url = new URL(value);
@@ -32152,7 +32153,7 @@ function artifactMetadata(slug, body) {
     versions: body["versions"]
   };
 }
-async function publishDirect(path9, kind, slug, title, favicon, label, baseVersion) {
+async function publishDirect(path9, kind, slug, title, favicon = "*", label, baseVersion) {
   const content = await artifactContent(path9, kind);
   const body = {
     title: await artifactTitle(path9, title),
@@ -32211,24 +32212,29 @@ function renderRead(value) {
   ]);
 }
 function renderList2(value) {
-  if (value.artifacts.length === 0) return "no code artifacts";
-  return value.artifacts.map((artifact, index) => renderLines([
-    `${index + 1}. ${artifact.title ?? "(untitled)"}`,
-    `   id:      ${artifact.artifact_id}`,
-    `   url:     ${artifact.artifact_url}`,
-    `   updated: ${artifact.updated_at_display}`,
-    artifact.label !== void 0 ? `   label:   ${artifact.label}` : "",
-    `   owner:   ${artifact.owner_email}`,
-    `   access:  ${artifact.relation}`,
-    `   views:   ${artifact.view_count} total, ${artifact.unique_view_count} unique`
-  ])).join("\n\n");
+  const galleryLine = `gallery: ${value.gallery_url}`;
+  if (value.artifacts.length === 0) return renderLines([galleryLine, "no code artifacts"]);
+  return renderLines([
+    galleryLine,
+    "",
+    value.artifacts.map((artifact, index) => renderLines([
+      `${index + 1}. ${artifact.title ?? "(untitled)"}`,
+      `   id:      ${artifact.artifact_id}`,
+      `   url:     ${artifact.artifact_url}`,
+      `   updated: ${artifact.updated_at_display}`,
+      artifact.label !== void 0 ? `   label:   ${artifact.label}` : "",
+      `   owner:   ${artifact.owner_email}`,
+      `   access:  ${artifact.relation}`,
+      `   views:   ${artifact.view_count} total, ${artifact.unique_view_count} unique`
+    ])).join("\n\n")
+  ]);
 }
 function renderDelete(value) {
   return `deleted: ${value.artifact_url}`;
 }
 var publishParams = {
   file: S.String({ description: "Local .html, .htm, or .md file to publish." }),
-  favicon: S.String({ description: "One or two emoji for the artifact browser-tab icon." }),
+  favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the HTML title or file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." }))
 };
@@ -32309,7 +32315,7 @@ var listCommand = defineCommand({
       updated_at: frame["updatedAt"],
       updated_at_display: formatTimestamp2(frame["updatedAt"])
     }));
-    return { artifacts };
+    return { gallery_url: artifactsGalleryUrl, artifacts };
   },
   render: { json: renderJson, markdown: renderList2, rich: (value) => process.stdout.write(`${renderList2(value)}
 `) }
@@ -32329,14 +32335,6 @@ var deleteCommand = defineCommand({
   },
   render: { json: renderJson, markdown: renderDelete, rich: (value, primitives) => primitives.logger.message(renderDelete(value), "") }
 });
-var galleryCommand = defineCommand({
-  name: "gallery",
-  description: "Return the Claude Code artifacts gallery URL.",
-  scope: ["cli", "mcp", "sdk"],
-  params: S.Object({}),
-  handler: async () => ({ url: "https://claude.ai/code/artifacts" }),
-  render: { json: renderJson, markdown: (value) => value.url, rich: (value, primitives) => primitives.logger.message(value.url, "") }
-});
 var root = defineGroup({
   name: "claude-artifacts",
   description: "Create Claude Code artifacts with the current Claude Code login.",
@@ -32346,8 +32344,7 @@ var root = defineGroup({
     readCommand,
     updateCommand,
     listCommand,
-    deleteCommand,
-    galleryCommand
+    deleteCommand
   ]
 });
 
