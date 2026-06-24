@@ -53,7 +53,13 @@ child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/ini
 write(2, "tools/list", {});
 const listed = await waitFor(2);
 const names = listed.result.tools.map((tool) => tool.name).sort();
-const expected = ["create", "delete", "list", "read", "update"];
+const expected = [
+  "claude_artifacts__create",
+  "claude_artifacts__delete",
+  "claude_artifacts__list",
+  "claude_artifacts__read",
+  "claude_artifacts__update",
+];
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`tools ${JSON.stringify(names)}`);
 
 child.stdin.end();
