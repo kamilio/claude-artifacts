@@ -1,28 +1,24 @@
 # claude-artifacts
 
-Turn local HTML or Markdown into Claude Code artifacts from your terminal.
+Publish Claude Code artifacts from your terminal.
 
-I love Claude Code artifacts. `claude-artifacts` exists because managing them should be as direct as creating them.
+I love Claude Code artifacts. `claude-artifacts` exists because sharing and updating them should be as direct as creating them. Point it at local HTML or Markdown, get a Claude artifact URL, and keep updating that same URL without going back through chat.
 
-`claude-artifacts` lets you publish, inspect, refresh, download, and clean up Claude Code artifacts without going back through chat. It uses the Claude Code login already on your machine, so there are no extra tokens to manage and no repeated upload dance when all you want is to ship the latest version of a file.
+## What You Can Do
 
-Use it when you want to:
-
-- Share a local prototype, report, dashboard, or write-up as a Claude artifact.
-- Update an artifact while keeping the same Claude URL.
-- Download the live artifact HTML for review or archiving.
-- See your artifact gallery URL when listing artifacts.
-- Give MCP clients a simple way to manage artifacts.
+- Publish local `.html`, `.htm`, or `.md` files as Claude Code artifacts.
+- Update an existing artifact without changing its URL.
+- List your Claude Code artifacts with URLs, owners, view counts, and the gallery link.
+- Download the live artifact HTML when you need to inspect or archive it.
+- Expose the same workflow to Claude Code, Codex, Cursor, and other MCP-capable coding agents.
 
 ## Install
-
-Install from npm:
 
 ```sh
 npm install -g claude-artifacts
 ```
 
-If you need to log in first:
+If Claude Code is not logged in yet:
 
 ```sh
 claude /login
@@ -30,55 +26,39 @@ claude /login
 
 ## Quickstart
 
+Publish a page:
+
+```sh
+claude-artifacts create dashboard.html --title "Launch dashboard"
+```
+
 List your artifacts:
 
 ```sh
 claude-artifacts list
 ```
 
-Publish a local page:
-
-```sh
-claude-artifacts create dashboard.html --title "Launch dashboard"
-```
-
-Update the same artifact later without changing its URL:
+Update the same artifact later:
 
 ```sh
 claude-artifacts update <id> dashboard.html --title "Launch dashboard"
 ```
 
-Download the current artifact HTML:
+Download the live HTML:
 
 ```sh
 claude-artifacts read <id> --content > deployed.html
 ```
 
-Remove an artifact you no longer need:
+Delete an artifact:
 
 ```sh
 claude-artifacts delete <id>
 ```
 
-## Artifact IDs
-
-Every artifact URL includes a UUID:
-
-```text
-https://claude.ai/code/artifact/e2438a48-35b9-46bb-902e-fc59665782e2
-                              ^ this part
-```
-
-Commands accept either the full URL or just the UUID:
-
-```sh
-claude-artifacts read https://claude.ai/code/artifact/<id>
-claude-artifacts read <id>
-```
-
 ## Output
 
-`list` is formatted for quick scanning:
+`list` is built for quick scanning:
 
 ```text
 gallery: https://claude.ai/code/artifacts
@@ -93,23 +73,28 @@ gallery: https://claude.ai/code/artifacts
    views:   8 total, 1 unique
 ```
 
-## Commands
+Commands accept either the full Claude artifact URL or just the UUID:
 
 ```sh
-claude-artifacts create <file> [--title <title>] [--favicon <emoji>] [--label <label>]
-claude-artifacts list [--limit <n>]
-claude-artifacts read <artifact> [--content] [--content-version <version>]
-claude-artifacts update <artifact> <file> [--title <title>] [--favicon <emoji>] [--label <label>] [--base-version <version>]
-claude-artifacts delete <artifact>
+claude-artifacts read https://claude.ai/code/artifact/<id>
+claude-artifacts read <id>
 ```
 
-`<file>` must be `.html`, `.htm`, or `.md`.
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `claude-artifacts create <file> [--title <title>] [--favicon <emoji>] [--label <label>]` | Publish a local file as a new artifact. |
+| `claude-artifacts list [--limit <n>]` | Show your Claude Code artifacts and gallery URL. |
+| `claude-artifacts read <artifact> [--content] [--content-version <version>]` | Read artifact metadata, or include HTML with `--content`. |
+| `claude-artifacts update <artifact> <file> [--title <title>] [--favicon <emoji>] [--label <label>] [--base-version <version>]` | Publish a new version to an existing artifact URL. |
+| `claude-artifacts delete <artifact>` | Remove an artifact. |
 
 `--favicon` is optional. It is a short text icon, usually an emoji, shown by Claude for the artifact.
 
 ## MCP
 
-The package also includes an MCP stdio server. You can use it with Claude Code or any other coding agent that supports MCP stdio servers.
+Use the MCP server with Claude Code or any other coding agent that supports MCP stdio servers:
 
 ```sh
 npx -y --package claude-artifacts claude-artifacts-mcp
@@ -138,9 +123,6 @@ claude_artifacts__update
 claude_artifacts__delete
 ```
 
-## Auth
+## How Login Works
 
-The CLI reads the same OAuth session Claude Code already uses:
-
-- macOS: `Claude Code-credentials` in the keychain
-- Linux and other non-macOS systems: `~/.claude/.credentials.json`
+`claude-artifacts` uses the same Claude Code login already on your machine. There is no separate API key to create or paste.
