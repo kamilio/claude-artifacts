@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Publish, update, and manage Claude Code artifacts from your terminal. Includes an MCP server for coding agents.">
+    <title>claude-artifacts</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <img class="hero-visual" src="./assets/hero-preview.png" alt="Terminal showing claude-artifacts publishing and listing Claude Code artifacts">
+        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-content">
+          <p class="eyebrow">Claude Code artifacts, from your shell</p>
+          <h1 id="hero-title">Ship artifacts without going back through chat.</h1>
+          <p class="lede">Publish local HTML or Markdown, keep the same Claude URL as you iterate, and wire the same workflow into MCP-capable coding agents.</p>
+          <div class="command-row" data-copy-shell>
+            <code>npm install -g claude-artifacts</code>
+            <button type="button" data-copy="npm install -g claude-artifacts" aria-label="Copy npm install command">Copy</button>
+          </div>
+          <div class="hero-actions">
+            <a href="#quickstart">Quickstart</a>
+            <a href="#mcp">MCP setup</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="band" id="quickstart" aria-labelledby="quickstart-title">
+        <div class="section-head">
+          <p class="eyebrow">Fast path</p>
+          <h2 id="quickstart-title">Create, update, inspect.</h2>
+        </div>
+        <div class="steps">
+          <article>
+            <span class="step-index">01</span>
+            <h3>Publish a page</h3>
+            <div class="copy-line" data-copy-shell>
+              <code>claude-artifacts create dashboard.html --title "Launch dashboard"</code>
+              <button type="button" data-copy='claude-artifacts create dashboard.html --title "Launch dashboard"' aria-label="Copy create command">Copy</button>
+            </div>
+          </article>
+          <article>
+            <span class="step-index">02</span>
+            <h3>Keep the URL</h3>
+            <div class="copy-line" data-copy-shell>
+              <code>claude-artifacts update &lt;id&gt; dashboard.html --title "Launch dashboard"</code>
+              <button type="button" data-copy='claude-artifacts update <id> dashboard.html --title "Launch dashboard"' aria-label="Copy update command">Copy</button>
+            </div>
+          </article>
+          <article>
+            <span class="step-index">03</span>
+            <h3>Read it back</h3>
+            <div class="copy-line" data-copy-shell>
+              <code>claude-artifacts read &lt;id&gt; --content &gt; deployed.html</code>
+              <button type="button" data-copy="claude-artifacts read <id> --content > deployed.html" aria-label="Copy read command">Copy</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="band compact" aria-labelledby="why-title">
+        <div class="section-head">
+          <p class="eyebrow">Why it exists</p>
+          <h2 id="why-title">Artifacts are great. Re-uploading by hand is not.</h2>
+        </div>
+        <div class="feature-grid">
+          <p>Uses your existing Claude Code login.</p>
+          <p>Accepts full artifact URLs or UUIDs.</p>
+          <p>Lists URLs, owners, views, and gallery link.</p>
+          <p>Ships an MCP server for other coding agents.</p>
+        </div>
+      </section>
+
+      <section class="band" id="mcp" aria-labelledby="mcp-title">
+        <div class="section-head">
+          <p class="eyebrow">MCP</p>
+          <h2 id="mcp-title">Use it from agent workflows.</h2>
+        </div>
+        <div class="mcp-layout">
+          <div>
+            <p>Run the MCP stdio server with `npx`, then expose prefixed tools to Claude Code, Codex, Cursor, or any MCP-capable coding agent.</p>
+            <div class="copy-line" data-copy-shell>
+              <code>npx -y --package claude-artifacts claude-artifacts-mcp</code>
+              <button type="button" data-copy="npx -y --package claude-artifacts claude-artifacts-mcp" aria-label="Copy MCP command">Copy</button>
+            </div>
+          </div>
+          <ul class="tool-list" aria-label="Available MCP tools">
+            <li>claude_artifacts__create</li>
+            <li>claude_artifacts__list</li>
+            <li>claude_artifacts__read</li>
+            <li>claude_artifacts__update</li>
+            <li>claude_artifacts__delete</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+    <script src="./script.js"></script>
+  </body>
+</html>
