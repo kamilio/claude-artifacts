@@ -69,6 +69,25 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     const invalid = await run(['create', site, '--share', 'public']);
     assert.notEqual(invalid.code, 0);
     assert.equal(requests.length, beforeInvalid);
+    // Real CLI build; only generated files reach the deployment API.
+    const source = join(dir, 'source-app'); await mkdir(source);
+    await mkdir(join(source, 'node_modules'));
+    await writeFile(join(source, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }));
+    await writeFile(join(source, 'build.cjs'), 'const fs=require("node:fs"); console.log("compiler progress"); fs.mkdirSync("dist",{recursive:true}); fs.writeFileSync("dist/index.html","<!doctype html><h1>Fresh build</h1>");');
+    const built = await ok(['create', source, '--share', 'private']);
+    assert.equal(built.built, true);
+    assert.equal(built.source_path, source);
+    assert.equal(built.publish_path, join(source, 'dist'));
+    assert.deepEqual(built.files, ['index.html']);
+    assert.equal(requests.filter(request => request.method === 'POST').at(-1).body.title, 'source-app');
+    const countBeforeFailure = requests.length;
+    await writeFile(join(source, 'build.cjs'), 'process.exit(1);');
+    const badBuild = await run(['update', id, source]);
+    assert.notEqual(badBuild.code, 0);
+    assert.match(badBuild.text, /existing output was not used/);
+    assert.equal(requests.length, countBeforeFailure, 'failed build must not call deploy or sharing API');
+    const prebuilt = await ok(['update', id, source, '--skip-build', '--output-dir', 'dist']);
+    assert.equal(prebuilt.built, false);
     failShare = true;
     const failed = await run(['create', site]);
     assert.notEqual(failed.code, 0);

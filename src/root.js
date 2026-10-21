@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { auth } from "./auth.js";
+import { prepareWebsite } from "./build.js";
 import { readSettings, updateSettings } from "./settings.js";
 import { websiteManifest, maxDeployBytes } from "./website.js";
 import { setArtifactSharing, validateShare } from "./sharing.js";
@@ -198,10 +199,12 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share) {
+async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share, buildOptions = {}) {
   const requestedShare = share === undefined ? (slug === undefined ? (await readSettings()).defaultShare : undefined) : validateShare(share);
+  const prepared = kind === "website" ? await prepareWebsite(path, buildOptions) : undefined;
+  if (kind !== "website" && Object.values(buildOptions).some(value => value !== undefined && value !== false)) throw new Error("Build options require a directory, not a single file.");
   const payload = kind === "website"
-    ? { manifest: await websiteManifest(path), mode: "replace" }
+    ? { manifest: await websiteManifest(prepared.path), mode: "replace" }
     : { content: await artifactContent(path, kind, language) };
   const body = {
     title: title ?? (kind === "website" ? basename(path) : await artifactTitle(path)),
@@ -228,7 +231,7 @@ async function publishDirect(path, kind, language, slug, title, favicon = "*", l
     read: responseBody["read"],
     shared: shareMode !== undefined ? shareMode !== "owner" : responseBody["shared"],
     share_mode: shareMode ?? responseBody["read"],
-    ...(kind === "website" ? { files: Object.keys(payload.manifest) } : {}),
+    ...(kind === "website" ? { files: Object.keys(payload.manifest), publish_path: prepared.path, built: prepared.built, ...(prepared.built ? { framework: prepared.framework, package_manager: prepared.package_manager } : {}) } : {}),
   };
 }
 
@@ -255,6 +258,7 @@ function renderPublish(value) {
   return renderLines([
     `artifact: ${value.artifact_url}`,
     `source:   ${value.source_path}`,
+    value.built ? `build:    ${value.framework} → ${value.publish_path}` : "",
     `version:  ${value.version}`,
     value.share_mode !== undefined ? `sharing:  ${value.share_mode}` : "",
   ]);
@@ -297,8 +301,20 @@ function renderDelete(value) {
   return `deleted: ${value.artifact_url}`;
 }
 
+const buildParams = {
+  buildCommand: S.Optional(S.String({ description: "Custom shell build command, run in the project directory instead of the detected command." })),
+  outputDir: S.Optional(S.String({ description: "Static build output directory, relative to the project. Overrides framework defaults." })),
+  skipBuild: S.Optional(S.Boolean({ description: "Publish an already-built directory without building or installing dependencies." })),
+  skipInstall: S.Optional(S.Boolean({ description: "Skip automatic dependency installation when node_modules is absent." })),
+};
+
+function buildOptions(params) {
+  return Object.fromEntries(Object.keys(buildParams).map(key => [key, params[key]]));
+}
+
 const publishParams = {
-  file: S.String({ description: "Local HTML, Markdown, text/code file, or built website directory containing index.html." }),
+  ...buildParams,
+  file: S.String({ description: "Local file, built website directory, or website project to build automatically." }),
   favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." })),
@@ -308,14 +324,14 @@ const publishParams = {
 const createCommand = defineCommand({
   name: "create",
   aliases: ["publish"],
-  description: "Publish a new Claude Code artifact from a local file or website directory.",
+  description: "Publish a file or website. Website projects are built automatically.",
   scope: ["cli", "mcp", "sdk"],
   positional: ["file"],
   params: S.Object(publishParams),
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share, buildOptions(params));
     return { ...published, source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -334,7 +350,7 @@ const updateCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share, buildOptions(params));
     return { ...published, artifact_id: artifactId(params.artifact), source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
