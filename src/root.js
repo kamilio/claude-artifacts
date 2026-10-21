@@ -202,7 +202,7 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share, buildOptions = {}, dryRun = false) {
+async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share, buildOptions = {}) {
   const requestedShare = share === undefined ? (slug === undefined ? (await readSettings()).defaultShare : undefined) : validateShare(share);
   const prepared = kind === "website" ? await prepareWebsite(path, buildOptions) : undefined;
   if (kind !== "website" && Object.values(buildOptions).some(value => value !== undefined && value !== false)) throw new Error("Build options require a directory, not a single file.");
@@ -217,21 +217,7 @@ async function publishDirect(path, kind, language, slug, title, favicon = "*", l
     ...(label !== undefined ? { label } : {}),
     ...(baseVersion !== undefined ? { baseVersion } : {}),
   };
-  const uploadBytes = Buffer.byteLength(JSON.stringify(body));
-  if (uploadBytes > maxDeployBytes) throw new Error("Artifact exceeds the 16 MiB encoded upload limit.");
-  const website = kind === "website" ? {
-    files: Object.keys(payload.manifest), publish_path: prepared.path, built: prepared.built,
-    ...(prepared.built ? { framework: prepared.framework, package_manager: prepared.package_manager } : {}),
-  } : {};
-  if (dryRun) return {
-    dry_run: true, title: body.title, kind, upload_bytes: uploadBytes, upload_limit_bytes: maxDeployBytes,
-    requested_share: requestedShare ?? "unchanged",
-    ...(slug !== undefined ? { artifact_id: slug } : {}),
-    ...website,
-    ...(kind === "website" ? { assets: Object.entries(payload.manifest).map(([path, asset]) => ({
-      path, content_type: asset.contentType, encoded_bytes: Buffer.byteLength(JSON.stringify(asset)),
-    })) } : {}),
-  };
+  if (Buffer.byteLength(JSON.stringify(body)) > maxDeployBytes) throw new Error("Artifact exceeds the 16 MiB encoded upload limit.");
   const responseBody = await frameRequest("POST", "/api/frame/deploy/direct", body);
   const responseSlug = responseBody["slug"];
   const version = responseBody["version"];
@@ -248,7 +234,7 @@ async function publishDirect(path, kind, language, slug, title, favicon = "*", l
     read: responseBody["read"],
     shared: shareMode !== undefined ? shareMode !== "owner" : responseBody["shared"],
     share_mode: shareMode ?? responseBody["read"],
-    ...website,
+    ...(kind === "website" ? { files: Object.keys(payload.manifest), publish_path: prepared.path, built: prepared.built, ...(prepared.built ? { framework: prepared.framework, package_manager: prepared.package_manager } : {}) } : {}),
   };
 }
 
@@ -272,14 +258,6 @@ function formatTimestamp(value) {
 }
 
 function renderPublish(value) {
-  if (value.dry_run) return renderLines([
-    "dry run: validated locally; nothing published",
-    `source:   ${value.source_path}`,
-    value.publish_path ? `output:   ${value.publish_path}` : "",
-    `payload:  ${value.upload_bytes} / ${value.upload_limit_bytes} bytes`,
-    `sharing:  ${value.requested_share}`,
-    ...(value.assets ?? []).map(asset => `  ${asset.path} (${asset.content_type}, ${asset.encoded_bytes} encoded bytes)`),
-  ]);
   return renderLines([
     `artifact: ${value.artifact_url}`,
     `source:   ${value.source_path}`,
@@ -339,7 +317,6 @@ function buildOptions(params) {
 
 const publishParams = {
   ...buildParams,
-  dryRun: S.Optional(S.Boolean({ description: "Build and validate locally, reporting files and upload size without authentication or API calls. Build/install scripts still run unless --skip-build is set." })),
   file: S.String({ description: "Local file, built website directory, or website project to build automatically." }),
   favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the file basename." })),
@@ -357,7 +334,7 @@ const createCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share, buildOptions(params), params.dryRun);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share, buildOptions(params));
     return { ...published, source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -376,7 +353,7 @@ const updateCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share, buildOptions(params), params.dryRun);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share, buildOptions(params));
     return { ...published, artifact_id: artifactId(params.artifact), source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },

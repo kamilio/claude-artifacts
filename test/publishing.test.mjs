@@ -31,16 +31,16 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     } else { res.writeHead(404); res.end('{}'); }
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const run = (args, env = {}) => new Promise((resolvePromise, reject) => {
+  const run = (args) => new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [resolve('bin/claude-artifacts.mjs'), ...args, '--output', 'json'], {
       env: { ...process.env, CLAUDE_ARTIFACTS_CONFIG_DIR: join(dir, 'config'), CLAUDE_ARTIFACTS_OAUTH_TOKEN: 'synthetic',
-        CLAUDE_CODE_ARTIFACTS_API_BASE_URL: `http://127.0.0.1:${server.address().port}`, ...env },
+        CLAUDE_CODE_ARTIFACTS_API_BASE_URL: `http://127.0.0.1:${server.address().port}` },
     });
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
     child.on('error', reject); child.on('close', code => resolvePromise({ code, stdout, stderr, text: stdout + stderr }));
   });
-  const ok = async (args, env) => { const result = await run(args, env); assert.equal(result.code, 0, result.text); return JSON.parse(result.stdout); };
+  const ok = async args => { const result = await run(args); assert.equal(result.code, 0, result.text); return JSON.parse(result.stdout); };
   try {
     const site = join(dir, 'website'); await mkdir(site);
     await writeFile(join(site, 'index.html'), '<!doctype html><a href="about.html">About</a>');
@@ -48,28 +48,15 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     await writeFile(join(site, 'logo.png'), Buffer.from([137, 80, 78, 71]));
     assert.equal((await ok(['config'])).authMode, 'separate');
     await ok(['config', '--default-share', 'org']);
-    const noAuth = { CLAUDE_ARTIFACTS_OAUTH_TOKEN: '', CLAUDE_CODE_OAUTH_TOKEN: '', CLAUDE_ARTIFACTS_AUTH_MODE: 'separate' };
-    const preview = await ok(['create', site, '--dry-run'], noAuth);
-    assert.equal(preview.dry_run, true);
-    assert.equal(preview.requested_share, 'org');
-    assert.deepEqual(preview.files, ['about.html', 'index.html', 'logo.png']);
-    assert.equal(preview.assets.find(asset => asset.path === 'logo.png').content_type, 'image/png');
-    assert.equal(preview.artifact_url, undefined);
-    assert.equal(requests.length, 0, 'dry run must not authenticate, deploy, or change sharing');
     const created = await ok(['create', site]);
     assert.equal(created.share_mode, 'org');
     assert.equal(created.files.length, 3);
     const deploy = requests.find(request => request.method === 'POST');
-    assert.equal(preview.upload_bytes, Buffer.byteLength(JSON.stringify(deploy.body)));
     assert.equal(deploy.body.mode, 'replace');
     assert.equal(deploy.body.content, undefined);
     assert.equal(deploy.body.manifest['logo.png'].contentType, 'image/png');
     await rm(join(site, 'about.html'));
     const beforeUpdate = requests.length;
-    const updatePreview = await ok(['update', id, site, '--dry-run'], noAuth);
-    assert.equal(updatePreview.requested_share, 'unchanged');
-    assert.equal(updatePreview.artifact_id, id);
-    assert.equal(requests.length, beforeUpdate);
     await ok(['update', id, site, '--base-version', 'v1']);
     assert.equal(requests.length, beforeUpdate + 1, 'updates must preserve audience without permission mutations');
     assert.equal(files['about.html'], undefined, 'directory update removes old assets');
@@ -87,11 +74,6 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     await mkdir(join(source, 'node_modules'));
     await writeFile(join(source, 'package.json'), JSON.stringify({ scripts: { build: 'node build.cjs' } }));
     await writeFile(join(source, 'build.cjs'), 'const fs=require("node:fs"); console.log("compiler progress"); fs.mkdirSync("dist",{recursive:true}); fs.writeFileSync("dist/index.html","<!doctype html><h1>Fresh build</h1>");');
-    const beforePreviewBuild = requests.length;
-    const buildPreview = await ok(['create', source, '--dry-run'], noAuth);
-    assert.equal(buildPreview.built, true);
-    assert.deepEqual(buildPreview.files, ['index.html']);
-    assert.equal(requests.length, beforePreviewBuild);
     const built = await ok(['create', source, '--share', 'private']);
     assert.equal(built.built, true);
     assert.equal(built.source_path, source);
@@ -104,10 +86,6 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     assert.notEqual(badBuild.code, 0);
     assert.match(badBuild.text, /existing output was not used/);
     assert.equal(requests.length, countBeforeFailure, 'failed build must not call deploy or sharing API');
-    const badPreview = await run(['create', source, '--dry-run'], noAuth);
-    assert.notEqual(badPreview.code, 0);
-    assert.match(badPreview.text, /existing output was not used/);
-    assert.equal(requests.length, countBeforeFailure);
     const prebuilt = await ok(['update', id, source, '--skip-build', '--output-dir', 'dist']);
     assert.equal(prebuilt.built, false);
     failShare = true;
