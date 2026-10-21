@@ -13,8 +13,20 @@ const binaryTypes = {
   ".ttf": "font/ttf", ".otf": "font/otf", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav",
   ".mp4": "video/mp4", ".webm": "video/webm", ".pdf": "application/pdf",
 };
-const pathPattern = /^(?!\/)(?!.*\/\/)(?!.*\/$)(?!(?:^|.*\/)\.\.?(?:\/|$))[^\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029\\?#%:;]{1,512}$/u;
+export const pathPattern = /^(?!\/)(?!.*\/\/)(?!.*\/$)(?!(?:^|.*\/)\.\.?(?:\/|$))[^\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029\\?#%:;]{1,512}$/u;
 export const maxDeployBytes = 16 * 1024 * 1024;
+
+export function encodeAsset(bytes, contentType, path) {
+  const type = contentType.split(";")[0].trim().toLowerCase();
+  const text = type.startsWith("text/") || Object.values(textTypes).includes(type) ||
+    ["application/javascript", "application/ecmascript", "application/x-javascript"].includes(type) || /\+(?:json|xml)$/.test(type);
+  let content;
+  if (text) {
+    try { content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); }
+    catch { throw new Error(`Website text must be UTF-8: ${path}`); }
+  } else content = bytes.toString("base64");
+  return { content, contentType };
+}
 
 // Send one atomic manifest. No asset URL rewriting or client-side router is needed.
 export async function websiteManifest(directory) {
@@ -40,13 +52,7 @@ export async function websiteManifest(directory) {
       const file = await open(absolute, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
       let bytes;
       try { bytes = await file.readFile(); } finally { await file.close(); }
-      const text = Object.hasOwn(textTypes, extension);
-      let content;
-      if (text) {
-        try { content = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
-        catch { throw new Error(`Website text must be UTF-8: ${path}`); }
-      } else { content = bytes.toString("base64"); }
-      const asset = { content, contentType };
+      const asset = encodeAsset(bytes, contentType, path);
       wireBytes += Buffer.byteLength(JSON.stringify({ [path]: asset }));
       if (wireBytes > maxDeployBytes) throw new Error("Website exceeds the 16 MiB encoded upload limit. Compress assets or publish a smaller build.");
       manifest[path] = asset;

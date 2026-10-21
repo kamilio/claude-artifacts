@@ -26,7 +26,8 @@
     "smoke:mcp": "node test/mcp-smoke.mjs && CLAUDE_ARTIFACTS_MCP_TEST_BIN=dist/claude-artifacts-mcp.mjs node test/mcp-smoke.mjs",
     "smoke:release": "npm run build && node dist/claude-artifacts.mjs --help && node dist/claude-artifacts.mjs --version && npm pack --dry-run",
     "test": "npm run build && node --test test/*.test.mjs && npm run smoke && npm run smoke:dist && npm run smoke:mcp",
-    "smoke:frameworks": "node test/build-frameworks.mjs"
+    "smoke:frameworks": "node test/build-frameworks.mjs",
+    "test:live": "node test/live-lifecycle.mjs"
   },
   "repository": {
     "type": "git",

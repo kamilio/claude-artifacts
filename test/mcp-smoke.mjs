@@ -22,6 +22,7 @@ const server = http.createServer(async (request, response) => {
   if (request.url === "/api/frame/deploy/direct") {
     deployed = JSON.parse(body); response.end(JSON.stringify({ slug: artifactId, version: "v1", read: "owner" }));
   } else if (request.url === `/api/frame/perm/${artifactId}`) response.end(JSON.stringify({ read: { mode: "owner" }, version: "p1" }));
+  else if (request.url === `/api/frame/versions/${artifactId}`) response.end(JSON.stringify({ live: "v1", history: ["v1"], versions: { v1: { title: "Saved MCP title" } } }));
   else { response.writeHead(404); response.end("{}"); }
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -79,10 +80,14 @@ try {
   const expected = [
     "claude_artifacts__create",
     "claude_artifacts__delete",
+    "claude_artifacts__export",
+    "claude_artifacts__init",
     "claude_artifacts__list",
     "claude_artifacts__read",
+    "claude_artifacts__rollback",
     "claude_artifacts__share",
     "claude_artifacts__update",
+    "claude_artifacts__versions",
   ];
   if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`tools ${JSON.stringify(names)}`);
 
@@ -90,15 +95,25 @@ try {
     const tool = listed.result.tools.find(tool => tool.name === name);
     for (const parameter of ["build_command", "output_dir", "skip_build", "skip_install"]) assert.ok(tool.inputSchema.properties[parameter], parameter);
   }
-  write(3, "tools/call", { name: "claude_artifacts__create", arguments: { file: site } });
+  assert.ok(listed.result.tools.find(tool => tool.name === "claude_artifacts__rollback").inputSchema.properties.to_version);
+  assert.ok(listed.result.tools.find(tool => tool.name === "claude_artifacts__export").inputSchema.properties.content_version);
+  write(5, "tools/call", { name: "claude_artifacts__init", arguments: { directory: site, share: "private", title: "Saved MCP title" } });
+  const initializedProject = await waitFor(5);
+  assert.ok(!initializedProject.error && !initializedProject.result.isError, JSON.stringify(initializedProject));
+  write(3, "tools/call", { name: "claude_artifacts__create", arguments: { project: site } });
   const created = await waitFor(3);
   assert.ok(!created.error && !created.result.isError, JSON.stringify(created));
   assert.ok(deployed.manifest["index.html"].content.includes("MCP build"));
+  assert.equal(deployed.title, "Saved MCP title");
   assert.ok(stderr.includes("build output must stay off MCP stdout"));
-  write(4, "tools/call", { name: "claude_artifacts__update", arguments: { artifact: artifactId, file: site, build_command: "node build.cjs", output_dir: "dist", skip_install: true } });
+  write(4, "tools/call", { name: "claude_artifacts__update", arguments: { project: site, build_command: "node build.cjs", output_dir: "dist", skip_install: true } });
   const updated = await waitFor(4);
   assert.ok(!updated.error && !updated.result.isError, JSON.stringify(updated));
   assert.equal(deployed.slug, artifactId);
+  write(6, "tools/call", { name: "claude_artifacts__versions", arguments: { project: site } });
+  const versions = await waitFor(6);
+  assert.ok(!versions.error && !versions.result.isError, JSON.stringify(versions));
+  assert.ok(JSON.stringify(versions.result).includes('Saved MCP title'));
   child.stdin.end();
   await new Promise((resolvePromise) => child.on("close", resolvePromise));
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -48,19 +48,25 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     await writeFile(join(site, 'logo.png'), Buffer.from([137, 80, 78, 71]));
     assert.equal((await ok(['config'])).authMode, 'separate');
     await ok(['config', '--default-share', 'org']);
-    const created = await ok(['create', site]);
+    await ok(['init', site, '--title', 'Configured title', '--share', 'org']);
+    const created = await ok(['create', '--project', site]);
+    assert.equal(JSON.parse(await readFile(join(site, '.claude-artifacts.json'), 'utf8')).artifact, id);
     assert.equal(created.share_mode, 'org');
     assert.equal(created.files.length, 3);
     const deploy = requests.find(request => request.method === 'POST');
+    assert.equal(deploy.body.title, 'Configured title');
     assert.equal(deploy.body.mode, 'replace');
     assert.equal(deploy.body.content, undefined);
     assert.equal(deploy.body.manifest['logo.png'].contentType, 'image/png');
     await rm(join(site, 'about.html'));
     const beforeUpdate = requests.length;
-    await ok(['update', id, site, '--base-version', 'v1']);
+    await ok(['update', '--project', site, '--base-version', 'v1']);
     assert.equal(requests.length, beforeUpdate + 1, 'updates must preserve audience without permission mutations');
     assert.equal(files['about.html'], undefined, 'directory update removes old assets');
     assert.equal(requests.at(-1).body.baseVersion, 'v1');
+    await ok(['update', site, '--title', 'One-off title']);
+    assert.equal(requests.at(-1).body.title, 'One-off title');
+    assert.equal(requests.at(-1).body.slug, id);
     await ok(['create', site, '--share', 'private']);
     assert.equal(mode, 'owner');
     await ok(['share', id, '--share', 'org']);
@@ -94,6 +100,12 @@ test('CLI website create/update, persistent sharing defaults, overrides, and rec
     assert.match(failed.text, /Published https:\/\/claude.ai\/code\/artifact\//);
     assert.match(failed.text, /claude-artifacts share/);
     assert.match(failed.text, /do not create another artifact/);
+    const failedSite = join(dir, 'failed-share'); await mkdir(failedSite);
+    await writeFile(join(failedSite, 'index.html'), '<!doctype html><p>Saved target</p>');
+    await ok(['init', failedSite, '--share', 'org']);
+    assert.notEqual((await run(['create', failedSite])).code, 0);
+    assert.equal(JSON.parse(await readFile(join(failedSite, '.claude-artifacts.json'), 'utf8')).artifact, id,
+      'successful deploy must be remembered even if sharing subsequently fails');
   } finally {
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     await rm(dir, { recursive: true, force: true });

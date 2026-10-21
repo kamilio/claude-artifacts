@@ -10,8 +10,10 @@ I love Claude Code artifacts. `claude-artifacts` exists because sharing and upda
 - Build and publish a website project, or upload an existing static directory with pages, JavaScript, CSS, images, and fonts.
 - Sign in separately from Claude Code, and choose a default audience for new artifacts.
 - Update an existing artifact without changing its URL.
+- Save project settings and the artifact ID in `.claude-artifacts.json`.
 - List your Claude Code artifacts with URLs, owners, view counts, and the gallery link.
 - Download the live artifact HTML when you need to inspect or archive it.
+- Export every original page and asset, list versions, and restore an earlier version at the same URL.
 - Expose the same workflow to Claude Code, Codex, Cursor, and other MCP-capable coding agents.
 
 ## Install
@@ -90,6 +92,90 @@ Delete an artifact:
 ```sh
 claude-artifacts delete <id>
 ```
+
+## Project dotfile
+
+Inside your project, initialize `.claude-artifacts.json` once:
+
+```sh
+claude-artifacts init --title "Team website" --share org
+claude-artifacts create
+claude-artifacts update
+```
+
+The first successful create saves its artifact ID in the dotfile, even if the
+subsequent sharing change fails. Later `update` calls use that ID. `create`
+always creates a new artifact; it never replaces an already-saved target.
+To connect an existing artifact, use `init --artifact <id-or-url>` instead.
+`init` refuses to overwrite an existing dotfile; edit it to change settings.
+
+Example after the first publish:
+
+```json
+{
+  "file": ".",
+  "title": "Team website",
+  "share": "org",
+  "buildCommand": "npm run build",
+  "outputDir": "dist",
+  "artifact": "11111111-1111-4111-8111-111111111111"
+}
+```
+
+All fields are optional. `file` defaults to `.` and is relative to the dotfile.
+`outputDir` is relative to the source project passed to the build. `favicon`,
+`skipBuild`, and `skipInstall` can also be saved. Leave build settings out to use
+automatic framework detection. The dotfile contains no credentials and can be
+committed to Git; login remains in your user configuration.
+
+Commands find the nearest dotfile starting at the supplied source path, or the
+current directory when no source is supplied. Discovery stops at a Git
+repository boundary. Pass `--project ./my-app` to select a dotfile's directory
+explicitly. Command-line values override saved values. A saved `share` applies
+to new artifacts; updates preserve sharing unless you pass `--share` explicitly.
+Saved build options apply to the configured source path. If you explicitly point
+at a different source (such as its `dist/` directory or a single HTML file), the
+saved build options are left out; explicit build flags still apply.
+
+With a saved target, `update`, `read`, `versions`, `export`, and `rollback` can
+omit the artifact ID. `update ./my-app` uses that source directory's saved target.
+The existing `update <id> <source>` form still works. Delete and sharing commands
+continue to require an explicit artifact ID.
+
+## Export and rollback
+
+```sh
+claude-artifacts versions
+claude-artifacts export --directory ./backup
+claude-artifacts export --directory ./older-backup --content-version <version>
+claude-artifacts rollback --to-version <version>
+```
+
+Each command also accepts an explicit artifact ID or URL when you are outside a
+configured project. `versions` identifies the live version and lists retained
+versions with available titles, labels, and dates. Version history requires
+owner access on the hosting service.
+
+Export downloads the complete version manifest, including unlinked pages and
+binary assets. It saves the original uploaded bytes, without the scripts or
+base tags the host injects when serving a page. Available size and SHA-256
+checks are verified. The destination must be a new directory with an existing
+parent; existing files are never overwritten. Files are downloaded before the
+destination is created, so a failed download leaves no partial export.
+
+Rollback publishes the selected version's files as a **new version** of the same
+artifact. It restores the saved title and favicon, removes files introduced by
+later versions, keeps history, and leaves sharing unchanged. It checks the live
+version before writing, so a concurrent update produces a conflict instead of
+being overwritten. Use `--base-version <version>` to require a particular live
+version, or `--label "Restored release"` to name the new version.
+
+These commands handle published files, not runtime database contents, comments,
+external resources, or backend services. They require access to the version's
+original files and complete manifest; unavailable or partial versions are
+rejected. Downloads are limited to 256 files and 16 MiB of original bytes;
+rollback also enforces the 16 MiB encoded upload limit. Retention is controlled
+by the hosting service.
 
 ## Automatic builds
 
@@ -239,10 +325,14 @@ claude-artifacts read <id>
 
 | Command | Purpose |
 | --- | --- |
-| `claude-artifacts create <file-or-directory> [--title <title>] [--favicon <emoji>] [--label <label>] [--share private\|org]` | Publish a local file or static website as a new artifact. |
+| `claude-artifacts init [directory] [--artifact <id>] [--title <title>] [--share private\|org]` | Create the project dotfile. |
+| `claude-artifacts create [file-or-directory] [--title <title>] [--favicon <emoji>] [--label <label>] [--share private\|org]` | Publish a local file or static website as a new artifact. |
 | `claude-artifacts list [--limit <n>]` | Show your Claude Code artifacts and gallery URL. |
-| `claude-artifacts read <artifact> [--content] [--content-version <version>]` | Read artifact metadata, or include HTML with `--content`. |
-| `claude-artifacts update <artifact> <file-or-directory> [--title <title>] [--favicon <emoji>] [--label <label>] [--base-version <version>] [--share private\|org]` | Publish a new version to an existing artifact URL. |
+| `claude-artifacts read [artifact] [--content] [--content-version <version>]` | Read artifact metadata, or include HTML with `--content`. |
+| `claude-artifacts update [artifact] [file-or-directory] [--title <title>] [--favicon <emoji>] [--label <label>] [--base-version <version>] [--share private\|org]` | Publish a new version to an existing artifact URL. |
+| `claude-artifacts versions [artifact]` | List retained versions and identify the live version. |
+| `claude-artifacts export [artifact] --directory <new-directory> [--content-version <version>]` | Download all original files. |
+| `claude-artifacts rollback [artifact] --to-version <version> [--base-version <version>] [--label <label>]` | Restore all files from an earlier version. |
 | `claude-artifacts delete <artifact>` | Remove an artifact. |
 | `claude-artifacts share <artifact> --share private\|org` | Change an artifact audience. |
 | `claude-artifacts config [--auth-mode separate\|claude-code] [--default-share private\|org]` | Show or save local defaults. |
@@ -273,7 +363,10 @@ Example MCP config:
 }
 ```
 
-Website build options are available on both create and update.
+Website build options and project defaults are available on both create and
+update. Use `project` to select a dotfile directory when the MCP server runs
+elsewhere. Export uses `directory` and optional `content_version`; rollback
+requires `to_version` and accepts `base_version` and `label`.
 
 Available MCP tools:
 
@@ -284,6 +377,10 @@ claude_artifacts__read
 claude_artifacts__update
 claude_artifacts__delete
 claude_artifacts__share
+claude_artifacts__init
+claude_artifacts__versions
+claude_artifacts__export
+claude_artifacts__rollback
 ```
 
 ## How Login Works
@@ -323,3 +420,8 @@ and publishing through the CLI and MCP, including bundled executables.
 `npm run smoke:frameworks` additionally installs and builds pinned real Vite,
 Astro, Next.js, SvelteKit, Nuxt, and Angular fixtures in temporary directories.
 It requires Node 24 and network access, and deletes the fixtures afterward.
+
+`npm run test:live` requires a working login. It creates a temporary private
+artifact, publishes two versions, exports an old version, restores it, checks
+every original file and the unchanged audience, and deletes the artifact and
+temporary files afterward. It is not part of the default test suite.

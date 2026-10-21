@@ -1,17 +1,19 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import { auth } from "./auth.js";
+import { artifactId, frameRequest } from "./api.js";
 import { prepareWebsite } from "./build.js";
 import { readSettings, updateSettings } from "./settings.js";
 import { websiteManifest, maxDeployBytes } from "./website.js";
 import { setArtifactSharing, validateShare } from "./sharing.js";
+import { initializeProject, publishingOptions, projectArtifact, rememberArtifact } from "./project.js";
+import { exportArtifact, listVersions, rollbackArtifact } from "./versions.js";
 
 import { defineCommand, defineGroup, S } from "toolcraft";
 import { parse } from "toolcraft/design/parse";
 import { renderHtml } from "toolcraft/design/render-html";
 import { renderMarkdownHtml } from "toolcraft/design/render-markdown-html";
 
-const artifactIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const artifactCss = await readFile(new URL("./artifact.css", import.meta.url), "utf8");
 const artifactsGalleryUrl = "https://claude.ai/code/artifacts";
 const markdownHtmlOptions = { syntaxHighlight: true };
@@ -38,16 +40,6 @@ const codeLanguageByExtension = new Map([
   [".yaml", "yaml"],
   [".yml", "yaml"],
 ]);
-
-function artifactId(value) {
-  if (artifactIdPattern.test(value)) return value.toLowerCase();
-  try {
-    const url = new URL(value);
-    const match = /^\/code\/artifact\/([^/]+)\/?$/.exec(url.pathname);
-    if (url.protocol === "https:" && url.hostname === "claude.ai" && match && artifactIdPattern.test(match[1])) return match[1].toLowerCase();
-  } catch {}
-  throw new Error("Expected a Claude artifact UUID or https://claude.ai/code/artifact/<id> URL.");
-}
 
 function sourceKind(path) {
   const extension = extname(path).toLowerCase();
@@ -145,36 +137,6 @@ async function artifactTitle(path, title) {
   return basename(path, extname(path));
 }
 
-function artifactsApiBaseUrl() {
-  if (process.env["CLAUDE_CODE_ARTIFACTS_API_BASE_URL"] !== undefined) return process.env["CLAUDE_CODE_ARTIFACTS_API_BASE_URL"].replace(/\/+$/, "");
-  return "https://api.anthropic.com";
-}
-
-async function frameRequest(method, path, body, headers = {}) {
-  let token = await auth.token();
-  const send = () => fetch(`${artifactsApiBaseUrl()}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "X-Frame-CP": "go", ...headers },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(60_000), redirect: "error",
-  });
-  let response = await send();
-  if (response.status === 401) {
-    await response.body?.cancel();
-    const fresh = await auth.token(token);
-    if (fresh === token) throw new Error("Claude login was rejected. Run claude-artifacts auth login, or renew the selected environment/Claude Code login.");
-    token = fresh;
-    response = await send();
-  }
-  const text = await response.text();
-  let responseBody;
-  try { responseBody = text === "" ? null : JSON.parse(text); }
-  catch { throw new Error(`${method} ${path} HTTP ${response.status}: non-JSON response`); }
-  if (response.status === 409 && responseBody?.["conflict"] === true) throw new Error(`conflict: live version is ${responseBody["live"]}`);
-  if (response.status < 200 || response.status >= 300) throw new Error(`${method} ${path} ${response.status}: ${JSON.stringify(responseBody)}`);
-  return responseBody;
-}
-
 async function artifactAssetContent(slug, version, assetToken) {
   const response = await fetch(`https://${slug}.frame.claudeusercontent.com/_f/${version}/?__frame_t=${encodeURIComponent(assetToken)}`, {
     redirect: "manual",
@@ -202,7 +164,7 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share, buildOptions = {}) {
+async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share, buildOptions = {}, onPublished) {
   const requestedShare = share === undefined ? (slug === undefined ? (await readSettings()).defaultShare : undefined) : validateShare(share);
   const prepared = kind === "website" ? await prepareWebsite(path, buildOptions) : undefined;
   if (kind !== "website" && Object.values(buildOptions).some(value => value !== undefined && value !== false)) throw new Error("Build options require a directory, not a single file.");
@@ -222,6 +184,10 @@ async function publishDirect(path, kind, language, slug, title, favicon = "*", l
   const responseSlug = responseBody["slug"];
   const version = responseBody["version"];
   if (responseSlug === undefined || version === undefined) throw new Error(`deploy returned incomplete response: ${JSON.stringify(responseBody)}`);
+  if (onPublished) {
+    try { await onPublished(responseSlug); }
+    catch (error) { throw new Error(`Published https://claude.ai/code/artifact/${responseSlug} (version ${version}), but could not save its project target: ${error.message}. Save artifact: ${responseSlug} in the project dotfile; do not create another artifact. Sharing has not been changed yet.`); }
+  }
   let shareMode;
   if (requestedShare !== undefined) {
     try { shareMode = await setArtifactSharing(frameRequest, responseSlug, requestedShare); }
@@ -311,13 +277,20 @@ const buildParams = {
   skipInstall: S.Optional(S.Boolean({ description: "Skip automatic dependency installation when node_modules is absent." })),
 };
 
+const projectParam = S.Optional(S.String({ description: "Directory containing .claude-artifacts.json. Otherwise discover the nearest project dotfile." }));
+const savedArtifactParams = {
+  artifact: S.Optional(S.String({ description: "Artifact URL or ID. Defaults to the project dotfile's artifact." })),
+  project: projectParam,
+};
+
 function buildOptions(params) {
   return Object.fromEntries(Object.keys(buildParams).map(key => [key, params[key]]));
 }
 
 const publishParams = {
   ...buildParams,
-  file: S.String({ description: "Local file, built website directory, or website project to build automatically." }),
+  project: projectParam,
+  file: S.Optional(S.String({ description: "Local file, website directory, or project to build. Defaults to the project dotfile's file, then the current directory." })),
   favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." })),
@@ -331,10 +304,11 @@ const createCommand = defineCommand({
   scope: ["cli", "mcp", "sdk"],
   positional: ["file"],
   params: S.Object(publishParams),
-  handler: async ({ params }) => {
+  handler: async ({ params: input }) => {
+    const { options: params, project } = await publishingOptions(input);
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share, buildOptions(params));
+    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share, buildOptions(params), id => rememberArtifact(project, id));
     return { ...published, source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -346,11 +320,12 @@ const updateCommand = defineCommand({
   scope: ["cli", "mcp", "sdk"],
   positional: ["artifact", "file"],
   params: S.Object({
-    artifact: S.String({ description: "Claude Code artifact URL or artifact ID." }),
+    ...savedArtifactParams,
     baseVersion: S.Optional(S.String({ description: "Version to overwrite from. Pass the current version when enforcing conflict checks." })),
     ...publishParams,
   }),
-  handler: async ({ params }) => {
+  handler: async ({ params: input }) => {
+    const { options: params } = await publishingOptions(input, true);
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
     const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share, buildOptions(params));
@@ -365,13 +340,14 @@ const readCommand = defineCommand({
   scope: ["cli", "mcp", "sdk"],
   positional: ["artifact"],
   params: S.Object({
-    artifact: S.String({ description: "Claude Code artifact URL or artifact ID." }),
+    ...savedArtifactParams,
     content: S.Optional(S.Boolean({ description: "Include current HTML content." })),
     contentVersion: S.Optional(S.String({ description: "Artifact version to fetch when content is included." })),
   }),
   handler: async ({ params }) => {
-    const id = artifactId(params.artifact);
-    const response = await frameRequest("GET", `/api/frame/${id}`, undefined);
+    const id = await projectArtifact(params);
+    const response = await frameRequest("GET", `/api/frame/${id}${params.contentVersion === undefined ? "" : `?ver=${encodeURIComponent(params.contentVersion)}`}`, undefined);
+    if (params.contentVersion !== undefined && response.ver !== params.contentVersion) throw new Error("The server did not return the requested version.");
     const metadata = artifactMetadata(id, response);
     if (params.content !== true) return metadata;
     const version = params.contentVersion ?? response["ver"];
@@ -433,6 +409,55 @@ const simpleRender = {
   rich: (value, primitives) => primitives.logger.message(JSON.stringify(value, null, 2), ""),
 };
 
+const initCommand = defineCommand({
+  name: "init", description: "Create .claude-artifacts.json with project publishing settings. Never overwrites an existing dotfile.",
+  scope: ["cli", "mcp", "sdk"], positional: ["directory"],
+  params: S.Object({
+    directory: S.Optional(S.String({ description: "Existing project directory. Defaults to the current directory." })),
+    artifact: savedArtifactParams.artifact,
+    file: S.Optional(S.String({ description: "Source path relative to the project directory. Defaults to ." })),
+    title: publishParams.title, favicon: publishParams.favicon, share: publishParams.share,
+    ...buildParams,
+  }),
+  handler: async ({ params }) => {
+    const { directory, ...settings } = params;
+    return initializeProject(directory, Object.fromEntries(Object.entries(settings).filter(([, value]) => value !== undefined)));
+  },
+  render: simpleRender,
+});
+
+const versionsCommand = defineCommand({
+  name: "versions", description: "List saved artifact versions, marking the current live version.",
+  scope: ["cli", "mcp", "sdk"], positional: ["artifact"], params: S.Object(savedArtifactParams),
+  handler: async ({ params }) => listVersions(await projectArtifact(params)),
+  render: simpleRender,
+});
+
+const exportCommand = defineCommand({
+  name: "export", description: "Download every original page and asset into a new local directory.",
+  scope: ["cli", "mcp", "sdk"], positional: ["artifact"],
+  params: S.Object({
+    ...savedArtifactParams,
+    directory: S.String({ description: "Destination directory to create. Must not already exist; its parent must exist." }),
+    contentVersion: S.Optional(S.String({ description: "Version to export. Defaults to the version served to your account." })),
+  }),
+  handler: async ({ params }) => exportArtifact(await projectArtifact(params), params.directory, params.contentVersion),
+  render: simpleRender,
+});
+
+const rollbackCommand = defineCommand({
+  name: "rollback", description: "Restore all files from an older version by publishing a new version at the same URL. Preserves sharing and checks for concurrent updates.",
+  scope: ["cli", "mcp", "sdk"], positional: ["artifact"],
+  params: S.Object({
+    ...savedArtifactParams,
+    toVersion: S.String({ description: "Version to restore. Find IDs with the versions command." }),
+    baseVersion: S.Optional(S.String({ description: "Require this live version before restoring. Otherwise uses the current live version automatically." })),
+    label: publishParams.label,
+  }),
+  handler: async ({ params }) => rollbackArtifact(await projectArtifact(params), params.toVersion, params),
+  render: simpleRender,
+});
+
 const configCommand = defineCommand({
   name: "config",
   description: "Show or save authentication and new-artifact sharing defaults.",
@@ -488,11 +513,15 @@ export const root = defineGroup({
   children: [
     authGroup,
     configCommand,
+    initCommand,
     createCommand,
     readCommand,
     updateCommand,
     listCommand,
     deleteCommand,
     shareCommand,
+    versionsCommand,
+    exportCommand,
+    rollbackCommand,
   ],
 });
