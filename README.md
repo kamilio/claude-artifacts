@@ -8,6 +8,7 @@ I love Claude Code artifacts. `claude-artifacts` exists because sharing and upda
 
 - Publish local HTML, Markdown, data files, source files, and other text files as Claude Code artifacts.
 - Build and publish a website project, or upload an existing static directory with pages, JavaScript, CSS, images, and fonts.
+- Check the build, file list, and encoded upload size locally with `--dry-run` before publishing.
 - Sign in separately from Claude Code, and choose a default audience for new artifacts.
 - Update an existing artifact without changing its URL.
 - List your Claude Code artifacts with URLs, owners, view counts, and the gallery link.
@@ -82,7 +83,7 @@ claude-artifacts update <id> dashboard.html --title "Launch dashboard"
 Download the live HTML:
 
 ```sh
-claude-artifacts read <id> --content > deployed.html
+claude-artifacts read <id> --content --output json | jq -r '.content_html' > deployed.html
 ```
 
 Delete an artifact:
@@ -90,6 +91,24 @@ Delete an artifact:
 ```sh
 claude-artifacts delete <id>
 ```
+
+## Check before publishing
+
+Use `--dry-run` on `create` or `update` to build and validate the same payload
+that would be uploaded. The result lists website files, content types, encoded
+sizes, total request size, and requested sharing mode. No login or API calls are
+needed, and no artifact or permission is changed. Remote permissions and version
+conflicts are checked only during an actual upload.
+
+```sh
+claude-artifacts create ./my-app --dry-run
+claude-artifacts update <id> ./my-app --dry-run --output json
+claude-artifacts create ./my-app/dist --skip-build --dry-run
+```
+
+A dry run still executes local dependency installation and build scripts.
+Use `--skip-build` to inspect existing output without executing scripts. Single
+files are also rendered and size-checked. MCP exposes this option as `dry_run`.
 
 ## Automatic builds
 
@@ -106,7 +125,8 @@ your package-manager/runtime tooling.
 
 When `node_modules` is absent, it installs dependencies first. npm uses `ci`
 with a lockfile; pnpm and Bun use frozen lockfiles. Yarn uses
-`--frozen-lockfile` for Classic or `--immutable` for modern Yarn. Existing
+`--frozen-lockfile` for Classic or `--immutable` for modern Yarn (also detected
+from its lockfile when no version is declared). Existing
 Yarn PnP installations are recognized. Existing dependencies are reused; use your
 package manager to update them after changing dependencies. `--skip-install`
 disables the installation step.

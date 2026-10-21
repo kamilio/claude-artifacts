@@ -15,8 +15,10 @@ await mkdir(resolve(site, "node_modules"));
 await writeFile(resolve(site, "package.json"), JSON.stringify({ scripts: { build: "node build.cjs" } }));
 await writeFile(resolve(site, "build.cjs"), 'const fs = require("node:fs"); console.log("build output must stay off MCP stdout"); fs.mkdirSync("dist", {recursive:true}); fs.writeFileSync("dist/index.html", "<!doctype html><h1>MCP build</h1>");');
 let deployed;
+let requestCount = 0;
 const artifactId = "11111111-1111-4111-8111-111111111111";
 const server = http.createServer(async (request, response) => {
+  requestCount++;
   let body = ""; for await (const chunk of request) body += chunk;
   response.setHeader("content-type", "application/json");
   if (request.url === "/api/frame/deploy/direct") {
@@ -88,8 +90,13 @@ try {
 
   for (const name of ["claude_artifacts__create", "claude_artifacts__update"]) {
     const tool = listed.result.tools.find(tool => tool.name === name);
-    for (const parameter of ["build_command", "output_dir", "skip_build", "skip_install"]) assert.ok(tool.inputSchema.properties[parameter], parameter);
+    for (const parameter of ["build_command", "output_dir", "skip_build", "skip_install", "dry_run"]) assert.ok(tool.inputSchema.properties[parameter], parameter);
   }
+  write(5, "tools/call", { name: "claude_artifacts__create", arguments: { file: site, dry_run: true } });
+  const preview = await waitFor(5);
+  assert.ok(!preview.error && !preview.result.isError, JSON.stringify(preview));
+  assert.ok(JSON.stringify(preview.result).includes('upload_bytes'));
+  assert.equal(requestCount, 0, 'MCP dry run must not call the API');
   write(3, "tools/call", { name: "claude_artifacts__create", arguments: { file: site } });
   const created = await waitFor(3);
   assert.ok(!created.error && !created.result.isError, JSON.stringify(created));

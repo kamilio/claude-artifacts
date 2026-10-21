@@ -52,7 +52,9 @@ export async function packageManager(project, pkg = {}) {
   if (!declared && choices.length > 1) throw new Error("Conflicting package-manager lockfiles. Set packageManager in package.json or remove the obsolete lockfile.");
   const name = declared?.split("@")[0] ?? choices[0] ?? "npm";
   const locked = present.includes(name);
-  const modernYarn = name === "yarn" && ((declared && !/^yarn@1\./.test(declared)) || await exists(join(project, ".yarnrc.yml")));
+  // Modern Yarn lockfiles identify themselves even without a packageManager or .yarnrc.yml.
+  const modernYarn = name === "yarn" && (declared ? !/^yarn@1\./.test(declared)
+    : await exists(join(project, ".yarnrc.yml")) || (locked && /^__metadata:/m.test(await readFile(join(project, "yarn.lock"), "utf8"))));
   const install = name === "npm" ? [locked ? "ci" : "install", "--include=dev"]
     : name === "pnpm" ? ["install", "--prod=false", ...(locked ? ["--frozen-lockfile"] : [])]
       : name === "yarn" ? ["install", ...(locked ? [modernYarn ? "--immutable" : "--frozen-lockfile"] : [])]
