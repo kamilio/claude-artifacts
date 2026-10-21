@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const bin = resolve(root, process.env["CLAUDE_ARTIFACTS_TEST_BIN"] ?? "bin/claude-artifacts.mjs");
 const requests = [];
+const configDirectory = await mkdtemp(resolve(tmpdir(), "claude-artifacts-smoke-"));
 const artifactId = "11111111-1111-4111-8111-111111111111";
 let versionIndex = 0;
 let deleted = false;
@@ -21,7 +24,9 @@ const server = http.createServer((request, response) => {
     requests.push({ method: request.method, url: request.url, headers: request.headers, body: parsedBody });
     response.setHeader("content-type", "application/json");
     response.setHeader("connection", "close");
-    if (request.method === "POST" && request.url === "/api/frame/deploy/direct") {
+    if (request.method === "GET" && request.url === `/api/frame/perm/${artifactId}`) {
+      response.end(JSON.stringify({ read: { mode: "owner", users: [] }, version: "perm-1" }));
+    } else if (request.method === "POST" && request.url === "/api/frame/deploy/direct") {
       versionIndex += 1;
       response.end(JSON.stringify({ slug: parsedBody.slug ?? artifactId, version: `version-${versionIndex}`, read: "owner", shared: false }));
     } else if (request.method === "GET" && request.url === "/api/frame/frames?limit=60") {
@@ -47,7 +52,8 @@ function run(args) {
       cwd: root,
       env: {
         ...process.env,
-        CLAUDE_CODE_OAUTH_TOKEN: "fake-token",
+        CLAUDE_ARTIFACTS_OAUTH_TOKEN: "fake-token",
+        CLAUDE_ARTIFACTS_CONFIG_DIR: configDirectory,
         CLAUDE_CODE_ARTIFACTS_API_BASE_URL: `http://127.0.0.1:${server.address().port}`,
       },
     });
@@ -83,13 +89,13 @@ function includesHighlightedSpan(content) {
 
 const created = await run(["create", "test/smoke.html"]);
 if (created.artifact_id !== artifactId) throw new Error(`create id ${created.artifact_id}`);
-const htmlDeploy = requests.at(-1).body;
+const htmlDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(htmlDeploy.content, "<h1>Smoke Artifact</h1>", "html body not uploaded");
 if (htmlDeploy.title !== "smoke") throw new Error(`default title ${htmlDeploy.title}`);
 if (htmlDeploy.favicon !== "*") throw new Error(`default favicon ${htmlDeploy.favicon}`);
 
 await run(["create", "test/smoke.md", "--title", "Smoke Markdown", "--favicon", "🧪"]);
-const markdownDeploy = requests.at(-1).body;
+const markdownDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 if (markdownDeploy.favicon !== "🧪") throw new Error(`explicit favicon ${markdownDeploy.favicon}`);
 requireIncludes(markdownDeploy.content, "max-width: 760px", "artifact css not bundled");
 requireIncludes(markdownDeploy.content, "font: 14px/1.5 ui-rounded", "referenced artifact font style missing");
@@ -107,19 +113,19 @@ requireToken(markdownDeploy.content, "type", "markdown code type token missing")
 requireToken(markdownDeploy.content, "boolean", "markdown code boolean token missing");
 
 await run(["create", "test/smoke.yaml", "--title", "Smoke YAML"]);
-const yamlDeploy = requests.at(-1).body;
+const yamlDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(yamlDeploy.content, '<code class="language-yaml">', "yaml fence language missing");
 requireToken(yamlDeploy.content, "key", "yaml key token missing");
 requireIncludes(yamlDeploy.content, "  - alpha", "yaml content missing");
 
 await run(["create", "test/smoke.csv", "--title", "Smoke CSV"]);
-const csvDeploy = requests.at(-1).body;
+const csvDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(csvDeploy.content, '<code class="language-csv">', "csv fence language missing");
 requireIncludes(csvDeploy.content, "name,count\nalpha,1", "csv content missing");
 if (includesHighlightedSpan(csvDeploy.content)) throw new Error("csv should render as plain escaped code");
 
 await run(["create", "test/smoke.json", "--title", "Smoke JSON"]);
-const jsonDeploy = requests.at(-1).body;
+const jsonDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(jsonDeploy.content, '<code class="language-json">', "json fence language missing");
 requireToken(jsonDeploy.content, "key", "json key token missing");
 requireToken(jsonDeploy.content, "string", "json string token missing");
@@ -127,14 +133,14 @@ requireToken(jsonDeploy.content, "boolean", "json boolean token missing");
 requireIncludes(jsonDeploy.content, "&quot;enabled&quot;", "json content not escaped");
 
 await run(["create", "test/smoke.js", "--title", "Smoke JS"]);
-const jsDeploy = requests.at(-1).body;
+const jsDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(jsDeploy.content, '<code class="language-js">', "js fence language missing");
 requireToken(jsDeploy.content, "keyword", "js keyword token missing");
 requireToken(jsDeploy.content, "string", "js string token missing");
 requireIncludes(jsDeploy.content, "&lt;safe&gt;", "js content not escaped");
 
 await run(["create", "test/smoke.txt", "--title", "Smoke Text"]);
-const textDeploy = requests.at(-1).body;
+const textDeploy = requests.filter(request => request.method === "POST").at(-1).body;
 requireIncludes(textDeploy.content, '<code class="language-text">', "text fence language missing");
 requireIncludes(textDeploy.content, 'console.log(&quot;nested&quot;);', "nested code fence content not escaped");
 if (includesHighlightedSpan(textDeploy.content)) throw new Error("text should render as plain escaped code");
@@ -155,5 +161,6 @@ if (!requests.every((request) => request.headers.authorization === "Bearer fake-
 server.closeAllConnections?.();
 await new Promise((resolvePromise) => server.close(resolvePromise));
 
+await rm(configDirectory, { recursive: true, force: true });
 console.log(JSON.stringify({ ok: true, requests: requests.length }, null, 2));
 process.exit(0);

@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+const id = '11111111-1111-4111-8111-111111111111';
+test('CLI website create/update, persistent sharing defaults, overrides, and recoverable sharing failure', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'claude-artifacts-publishing-'));
+  const requests = [];
+  let mode = 'owner', revision = 1, failShare = false;
+  let files = {};
+  const server = http.createServer(async (req, res) => {
+    let text = ''; for await (const chunk of req) text += chunk;
+    const body = text ? JSON.parse(text) : undefined;
+    requests.push({ method: req.method, url: req.url, body, headers: req.headers });
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/frame/deploy/direct') {
+      if (!body.slug) mode = 'owner';
+      if (body.mode === 'replace') files = body.manifest;
+      res.end(JSON.stringify({ slug: id, version: 'v1', read: mode, shared: false }));
+    } else if (req.url === `/api/frame/perm/${id}` && req.method === 'GET') {
+      res.end(JSON.stringify({ read: { mode, users: [] }, assignableReadModes: ['owner', 'org'], version: `perm-${revision}` }));
+    } else if (req.url === `/api/frame/perm/${id}` && req.method === 'PATCH') {
+      if (failShare) { res.writeHead(403); res.end(JSON.stringify({ error: 'org_disabled' })); return; }
+      assert.equal(req.headers['if-match'], `perm-${revision}`);
+      mode = body.read.mode; revision++;
+      res.end(JSON.stringify({ read: { mode }, version: `perm-${revision}` }));
+    } else { res.writeHead(404); res.end('{}'); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const run = (args) => new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [resolve('bin/claude-artifacts.mjs'), ...args, '--output', 'json'], {
+      env: { ...process.env, CLAUDE_ARTIFACTS_CONFIG_DIR: join(dir, 'config'), CLAUDE_ARTIFACTS_OAUTH_TOKEN: 'synthetic',
+        CLAUDE_CODE_ARTIFACTS_API_BASE_URL: `http://127.0.0.1:${server.address().port}` },
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk);
+    child.on('error', reject); child.on('close', code => resolvePromise({ code, stdout, stderr, text: stdout + stderr }));
+  });
+  const ok = async args => { const result = await run(args); assert.equal(result.code, 0, result.text); return JSON.parse(result.stdout); };
+  try {
+    const site = join(dir, 'website'); await mkdir(site);
+    await writeFile(join(site, 'index.html'), '<!doctype html><a href="about.html">About</a>');
+    await writeFile(join(site, 'about.html'), '<!doctype html><h1>About</h1>');
+    await writeFile(join(site, 'logo.png'), Buffer.from([137, 80, 78, 71]));
+    assert.equal((await ok(['config'])).authMode, 'separate');
+    await ok(['config', '--default-share', 'org']);
+    const created = await ok(['create', site]);
+    assert.equal(created.share_mode, 'org');
+    assert.equal(created.files.length, 3);
+    const deploy = requests.find(request => request.method === 'POST');
+    assert.equal(deploy.body.mode, 'replace');
+    assert.equal(deploy.body.content, undefined);
+    assert.equal(deploy.body.manifest['logo.png'].contentType, 'image/png');
+    await rm(join(site, 'about.html'));
+    const beforeUpdate = requests.length;
+    await ok(['update', id, site, '--base-version', 'v1']);
+    assert.equal(requests.length, beforeUpdate + 1, 'updates must preserve audience without permission mutations');
+    assert.equal(files['about.html'], undefined, 'directory update removes old assets');
+    assert.equal(requests.at(-1).body.baseVersion, 'v1');
+    await ok(['create', site, '--share', 'private']);
+    assert.equal(mode, 'owner');
+    await ok(['share', id, '--share', 'org']);
+    assert.equal(mode, 'org');
+    const beforeInvalid = requests.length;
+    const invalid = await run(['create', site, '--share', 'public']);
+    assert.notEqual(invalid.code, 0);
+    assert.equal(requests.length, beforeInvalid);
+    failShare = true;
+    const failed = await run(['create', site]);
+    assert.notEqual(failed.code, 0);
+    assert.match(failed.text, /Published https:\/\/claude.ai\/code\/artifact\//);
+    assert.match(failed.text, /claude-artifacts share/);
+    assert.match(failed.text, /do not create another artifact/);
+  } finally {
+    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+    await rm(dir, { recursive: true, force: true });
+  }
+});

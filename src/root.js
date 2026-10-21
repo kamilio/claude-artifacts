@@ -1,16 +1,16 @@
-import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { basename, extname, resolve } from "node:path";
+import { auth } from "./auth.js";
+import { readSettings, updateSettings } from "./settings.js";
+import { websiteManifest, maxDeployBytes } from "./website.js";
+import { setArtifactSharing, validateShare } from "./sharing.js";
 
 import { defineCommand, defineGroup, S } from "toolcraft";
 import { parse } from "toolcraft/design/parse";
 import { renderHtml } from "toolcraft/design/render-html";
 import { renderMarkdownHtml } from "toolcraft/design/render-markdown-html";
 
-const artifactIdPattern = /^[0-9a-fA-F-]{36}$/;
-const execFilePromise = promisify(execFile);
+const artifactIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const artifactCss = await readFile(new URL("./artifact.css", import.meta.url), "utf8");
 const artifactsGalleryUrl = "https://claude.ai/code/artifacts";
 const markdownHtmlOptions = { syntaxHighlight: true };
@@ -39,10 +39,13 @@ const codeLanguageByExtension = new Map([
 ]);
 
 function artifactId(value) {
-  if (artifactIdPattern.test(value)) return value;
-  const url = new URL(value);
-  const parts = url.pathname.split("/");
-  return parts[parts.length - 1];
+  if (artifactIdPattern.test(value)) return value.toLowerCase();
+  try {
+    const url = new URL(value);
+    const match = /^\/code\/artifact\/([^/]+)\/?$/.exec(url.pathname);
+    if (url.protocol === "https:" && url.hostname === "claude.ai" && match && artifactIdPattern.test(match[1])) return match[1].toLowerCase();
+  } catch {}
+  throw new Error("Expected a Claude artifact UUID or https://claude.ai/code/artifact/<id> URL.");
 }
 
 function sourceKind(path) {
@@ -61,15 +64,16 @@ function sourceLanguage(path) {
 async function validateArtifactSource(file) {
   const path = resolve(file);
   const fileStat = await stat(path);
-  const kind = sourceKind(path);
+  if (!fileStat.isFile() && !fileStat.isDirectory()) throw new Error("Source must be a regular file or website directory.");
+  const kind = fileStat.isDirectory() ? "website" : sourceKind(path);
   const language = kind === "code" ? sourceLanguage(path) : undefined;
   return {
     path,
     kind,
     language,
     bytes: fileStat.size,
-    under_size_limit: fileStat.size <= 16 * 1024 * 1024,
-    publishable: fileStat.size <= 16 * 1024 * 1024,
+    under_size_limit: kind === "website" || fileStat.size <= maxDeployBytes,
+    publishable: kind === "website" || fileStat.size <= maxDeployBytes,
   };
 }
 
@@ -137,33 +141,31 @@ async function artifactTitle(path, title) {
   return basename(path, extname(path));
 }
 
-async function oauthToken() {
-  if (process.env["CLAUDE_CODE_OAUTH_TOKEN"]) return process.env["CLAUDE_CODE_OAUTH_TOKEN"];
-  if (process.platform === "darwin") {
-    const result = await execFilePromise("security", ["find-generic-password", "-a", process.env["USER"], "-w", "-s", "Claude Code-credentials"], { encoding: "utf8" });
-    return JSON.parse(result.stdout)["claudeAiOauth"]["accessToken"];
-  }
-  const configDir = process.env["CLAUDE_CONFIG_DIR"] ?? join(homedir(), ".claude");
-  return JSON.parse(await readFile(join(configDir, ".credentials.json"), "utf8"))["claudeAiOauth"]["accessToken"];
-}
-
 function artifactsApiBaseUrl() {
   if (process.env["CLAUDE_CODE_ARTIFACTS_API_BASE_URL"] !== undefined) return process.env["CLAUDE_CODE_ARTIFACTS_API_BASE_URL"].replace(/\/+$/, "");
   return "https://api.anthropic.com";
 }
 
-async function frameRequest(method, path, body) {
-  const response = await fetch(`${artifactsApiBaseUrl()}${path}`, {
+async function frameRequest(method, path, body, headers = {}) {
+  let token = await auth.token();
+  const send = () => fetch(`${artifactsApiBaseUrl()}${path}`, {
     method,
-    headers: {
-      authorization: `Bearer ${await oauthToken()}`,
-      "content-type": "application/json",
-      "X-Frame-CP": "go",
-    },
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "X-Frame-CP": "go", ...headers },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(60_000), redirect: "error",
   });
+  let response = await send();
+  if (response.status === 401) {
+    await response.body?.cancel();
+    const fresh = await auth.token(token);
+    if (fresh === token) throw new Error("Claude login was rejected. Run claude-artifacts auth login, or renew the selected environment/Claude Code login.");
+    token = fresh;
+    response = await send();
+  }
   const text = await response.text();
-  const responseBody = text === "" ? null : JSON.parse(text);
+  let responseBody;
+  try { responseBody = text === "" ? null : JSON.parse(text); }
+  catch { throw new Error(`${method} ${path} HTTP ${response.status}: non-JSON response`); }
   if (response.status === 409 && responseBody?.["conflict"] === true) throw new Error(`conflict: live version is ${responseBody["live"]}`);
   if (response.status < 200 || response.status >= 300) throw new Error(`${method} ${path} ${response.status}: ${JSON.stringify(responseBody)}`);
   return responseBody;
@@ -196,26 +198,37 @@ function artifactMetadata(slug, body) {
   };
 }
 
-async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion) {
-  const content = await artifactContent(path, kind, language);
+async function publishDirect(path, kind, language, slug, title, favicon = "*", label, baseVersion, share) {
+  const requestedShare = share === undefined ? (slug === undefined ? (await readSettings()).defaultShare : undefined) : validateShare(share);
+  const payload = kind === "website"
+    ? { manifest: await websiteManifest(path), mode: "replace" }
+    : { content: await artifactContent(path, kind, language) };
   const body = {
-    title: await artifactTitle(path, title),
+    title: title ?? (kind === "website" ? basename(path) : await artifactTitle(path)),
     favicon,
-    content,
+    ...payload,
     ...(slug !== undefined ? { slug } : {}),
     ...(label !== undefined ? { label } : {}),
     ...(baseVersion !== undefined ? { baseVersion } : {}),
   };
+  if (Buffer.byteLength(JSON.stringify(body)) > maxDeployBytes) throw new Error("Artifact exceeds the 16 MiB encoded upload limit.");
   const responseBody = await frameRequest("POST", "/api/frame/deploy/direct", body);
   const responseSlug = responseBody["slug"];
   const version = responseBody["version"];
   if (responseSlug === undefined || version === undefined) throw new Error(`deploy returned incomplete response: ${JSON.stringify(responseBody)}`);
+  let shareMode;
+  if (requestedShare !== undefined) {
+    try { shareMode = await setArtifactSharing(frameRequest, responseSlug, requestedShare); }
+    catch (error) { throw new Error(`Published https://claude.ai/code/artifact/${responseSlug} (version ${version}), but ${requestedShare} sharing failed: ${error.message}. Retry with claude-artifacts share ${responseSlug} --share ${requestedShare}; do not create another artifact.`); }
+  }
   return {
     artifact_url: `https://claude.ai/code/artifact/${responseSlug}`,
     artifact_id: responseSlug,
     version,
     read: responseBody["read"],
-    shared: responseBody["shared"],
+    shared: shareMode !== undefined ? shareMode !== "owner" : responseBody["shared"],
+    share_mode: shareMode ?? responseBody["read"],
+    ...(kind === "website" ? { files: Object.keys(payload.manifest) } : {}),
   };
 }
 
@@ -243,6 +256,7 @@ function renderPublish(value) {
     `artifact: ${value.artifact_url}`,
     `source:   ${value.source_path}`,
     `version:  ${value.version}`,
+    value.share_mode !== undefined ? `sharing:  ${value.share_mode}` : "",
   ]);
 }
 
@@ -284,23 +298,24 @@ function renderDelete(value) {
 }
 
 const publishParams = {
-  file: S.String({ description: "Local HTML, Markdown, or text/code data file to publish." }),
+  file: S.String({ description: "Local HTML, Markdown, text/code file, or built website directory containing index.html." }),
   favicon: S.Optional(S.String({ description: "One or two emoji for the artifact browser-tab icon. Defaults to *." })),
   title: S.Optional(S.String({ description: "Artifact title. Defaults to the file basename." })),
   label: S.Optional(S.String({ description: "Version label shown in the artifact version picker." })),
+  share: S.Optional(S.String({ description: "private or org. Creates use the saved default; updates preserve sharing unless explicitly set." })),
 };
 
 const createCommand = defineCommand({
   name: "create",
   aliases: ["publish"],
-  description: "Publish a new Claude Code artifact from a local file using the current Claude Code login without an LLM turn.",
+  description: "Publish a new Claude Code artifact from a local file or website directory.",
   scope: ["cli", "mcp", "sdk"],
   positional: ["file"],
   params: S.Object(publishParams),
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, undefined, params.title, params.favicon, params.label, undefined, params.share);
     return { ...published, source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -308,7 +323,7 @@ const createCommand = defineCommand({
 
 const updateCommand = defineCommand({
   name: "update",
-  description: "Publish a new version of an existing Claude Code artifact from a local file.",
+  description: "Publish a new version from a file or website directory. Directory updates replace all deployed files.",
   scope: ["cli", "mcp", "sdk"],
   positional: ["artifact", "file"],
   params: S.Object({
@@ -319,7 +334,7 @@ const updateCommand = defineCommand({
   handler: async ({ params }) => {
     const validation = await validateArtifactSource(params.file);
     if (!validation.publishable) throw new Error(`Artifact source is not publishable: ${validation.path}`);
-    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion);
+    const published = await publishDirect(validation.path, validation.kind, validation.language, artifactId(params.artifact), params.title, params.favicon, params.label, params.baseVersion, params.share);
     return { ...published, artifact_id: artifactId(params.artifact), source_path: validation.path };
   },
   render: { json: renderJson, markdown: renderPublish, rich: (value, primitives) => primitives.logger.message(renderPublish(value), "") },
@@ -393,15 +408,72 @@ const deleteCommand = defineCommand({
   render: { json: renderJson, markdown: renderDelete, rich: (value, primitives) => primitives.logger.message(renderDelete(value), "") },
 });
 
+const simpleRender = {
+  json: renderJson,
+  markdown: (value) => JSON.stringify(value, null, 2),
+  rich: (value, primitives) => primitives.logger.message(JSON.stringify(value, null, 2), ""),
+};
+
+const configCommand = defineCommand({
+  name: "config",
+  description: "Show or save authentication and new-artifact sharing defaults.",
+  scope: ["cli"],
+  params: S.Object({
+    authMode: S.Optional(S.String({ description: "separate (default) or claude-code to reuse Claude Code login." })),
+    defaultShare: S.Optional(S.String({ description: "private (default) or org. Applies to new artifacts only." })),
+  }),
+  handler: async ({ params }) => {
+    const changes = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined));
+    return Object.keys(changes).length ? updateSettings(changes) : readSettings();
+  },
+  render: simpleRender,
+});
+
+const authGroup = defineGroup({
+  name: "auth", description: "Manage the separate claude-artifacts login.", scope: ["cli"],
+  children: [
+    defineCommand({
+      name: "login", description: "Sign in through the browser with a separate OAuth session.", scope: ["cli"],
+      params: S.Object({ noBrowser: S.Optional(S.Boolean({ description: "Print the sign-in URL without opening a browser." })) }),
+      handler: ({ params }) => auth.login(params), render: simpleRender,
+    }),
+    defineCommand({
+      name: "status", description: "Show the credential source and local sign-in state without revealing tokens.", scope: ["cli"],
+      params: S.Object({}), handler: () => auth.status(), render: simpleRender,
+    }),
+    defineCommand({
+      name: "logout", description: "Remove the separate local login. Does not sign out Claude Code or clear environment tokens.", scope: ["cli"],
+      params: S.Object({}), handler: () => auth.logout(), render: simpleRender,
+    }),
+  ],
+});
+
+const shareCommand = defineCommand({
+  name: "share", description: "Change an existing artifact's audience to private or org.", scope: ["cli", "mcp", "sdk"],
+  positional: ["artifact"],
+  params: S.Object({
+    artifact: S.String({ description: "Claude Code artifact URL or artifact ID." }),
+    share: S.String({ description: "private or org." }),
+  }),
+  handler: async ({ params }) => {
+    const id = artifactId(params.artifact);
+    return { artifact_url: `https://claude.ai/code/artifact/${id}`, share_mode: await setArtifactSharing(frameRequest, id, params.share) };
+  },
+  render: simpleRender,
+});
+
 export const root = defineGroup({
   name: "claude-artifacts",
-  description: "Create Claude Code artifacts with the current Claude Code login.",
+  description: "Publish Claude Code artifacts and static websites with a separate Claude session.",
   scope: ["cli", "mcp", "sdk"],
   children: [
+    authGroup,
+    configCommand,
     createCommand,
     readCommand,
     updateCommand,
     listCommand,
     deleteCommand,
+    shareCommand,
   ],
 });
