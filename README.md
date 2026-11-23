@@ -314,10 +314,11 @@ gallery: https://claude.ai/code/artifacts
    views:   8 total, 1 unique
 ```
 
-Commands accept either the full Claude artifact URL or just the UUID:
+Commands accept Claude Code URLs, shared chat artifact URLs, UUIDs, or 22-character Base58 short IDs. Reading a shared link preserves its `sk` share key in the API request (redacted from HTTP errors). Existing Claude authentication is still required; a share key does not bypass access controls:
 
 ```sh
 claude-artifacts read https://claude.ai/code/artifact/<id>
+claude-artifacts read 'https://claude.ai/artifact/<short-id>?sk=<share-key>' --content
 claude-artifacts read <id>
 ```
 
